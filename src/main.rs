@@ -1,43 +1,35 @@
 #![no_std]
 #![no_main]
 
+use embassy_executor::Spawner;
+use embassy_time::{Duration, Timer};
 use esp_backtrace as _;
-use esp_hal::{
-    delay::{Delay, MicrosDurationU64},
-    esp_riscv_rt::entry,
-};
+use esp_hal::timer::timg::TimerGroup;
 
-extern crate alloc;
-use core::mem::MaybeUninit;
+esp_bootloader_esp_idf::esp_app_desc!();
 
-fn init_heap() {
-    const HEAP_SIZE: usize = 32 * 1024;
-    static mut HEAP: MaybeUninit<[u8; HEAP_SIZE]> = MaybeUninit::uninit();
-
-    unsafe {
-        esp_alloc::HEAP.add_region(esp_alloc::HeapRegion::new(
-            HEAP.as_mut_ptr() as *mut u8,
-            HEAP_SIZE,
-            esp_alloc::MemoryCapability::Internal.into(),
-        ));
+#[embassy_executor::task]
+async fn run() {
+    loop {
+        esp_println::println!("Hello world from embassy using esp-hal-async!");
+        Timer::after(Duration::from_millis(1_000)).await;
     }
 }
 
-#[entry]
-fn main() -> ! {
-    #[allow(unused)]
-    let peripherals = esp_hal::init(esp_hal::Config::default());
-    let delay = Delay::new();
-    init_heap();
-
+#[esp_hal_embassy::main]
+async fn main(spawner: Spawner) {
     esp_println::logger::init_logger_from_env();
+    let peripherals = esp_hal::init(esp_hal::Config::default());
 
-    let timg0 = esp_hal::timer::timg::TimerGroup::new(peripherals.TIMG0);
-    let rng = esp_hal::rng::Rng::new(peripherals.RNG);
-    let _init = esp_wifi::init(timg0.timer0, rng, peripherals.RADIO_CLK).unwrap();
+    esp_println::println!("Init!");
+
+    let timg0 = TimerGroup::new(peripherals.TIMG0);
+    esp_hal_embassy::init(timg0.timer0);
+
+    spawner.spawn(run()).ok();
 
     loop {
-        log::info!("Hello world!");
-        delay.delay(MicrosDurationU64::millis(500));
+        esp_println::println!("Bing!");
+        Timer::after(Duration::from_millis(5_000)).await;
     }
 }

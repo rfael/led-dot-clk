@@ -1,0 +1,3 @@
+[submodule "esp-hal"]
+	path = esp-hal
+	url = https://github.com/esp-rs/esp-hal
