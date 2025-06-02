@@ -35,6 +35,7 @@ embassy-futures = "0.1.1"
 embassy-net = { version = "0.6.0", features = [
     "tcp",
     "udp",
+    "dns",
     "dhcpv4",
     "medium-ethernet",
 ] }
@@ -44,17 +45,8 @@ embedded-io = "0.6.1"
 embedded-io-async = "0.6.1"
 heapless = { version = "0.8.0", default-features = false }
 static_cell = { version = "2.1.0", features = ["nightly"] }
-# smoltcp = { version = "0.12.0", default-features = false, features = [
-#     "medium-ethernet",
-#     "proto-dhcpv4",
-#     # "proto-igmp",
-#     "proto-ipv4",
-#     "socket-dhcpv4",
-#     "socket-icmp",
-#     "socket-raw",
-#     "socket-tcp",
-#     "socket-udp",
-# ] }
+sntpc = { version = "0.5.2", default-features = false, features = ["embassy-socket"] }
+chrono = { version = "0.4.41", default-features = false }
 
 [profile.dev]
 # Rust debug is too slow.

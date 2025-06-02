@@ -836,6 +836,7 @@ dependencies = [
 name = "led-dot-clk"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "embassy-executor",
  "embassy-futures",
  "embassy-net",
@@ -852,6 +853,7 @@ dependencies = [
  "esp-wifi",
  "heapless",
  "log",
+ "sntpc",
  "static_cell",
 ]
 
@@ -1177,6 +1179,16 @@ dependencies = [
  "cfg-if",
  "heapless",
  "managed",
+]
+
+[[package]]
+name = "sntpc"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78f778a0f82b3cf5d75f858eceee38e84d5292f1d03415e88cc4ec45ca6ba8a2"
+dependencies = [
+ "cfg-if",
+ "embassy-net",
 ]
 
 [[package]]
