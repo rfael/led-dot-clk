@@ -9,20 +9,20 @@ use esp_wifi::wifi::{
     ClientConfiguration, Configuration, Interfaces, WifiController, WifiDevice, WifiEvent,
     WifiState,
 };
+use thiserror::Error;
 
-use crate::{impl_from_variant, mk_static};
+use crate::mk_static;
 
 const SSID: &str = env!("SSID");
 const PASSWORD: &str = env!("PASSWORD");
 
 const RECONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum WifiError {
-    SpawnError(SpawnError),
-    Other(&'static str),
+    #[error("Spawnn error: {0}")]
+    SpawnError(#[from] SpawnError),
 }
-impl_from_variant!(WifiError, SpawnError, SpawnError);
 
 pub type WifiResult<T> = Result<T, WifiError>;
 

@@ -23,7 +23,7 @@ mod wifi;
 async fn main(spawner: Spawner) -> ! {
     fallible_main(spawner)
         .await
-        .inspect_err(|err| println!("Main failed: {err:?}"))
+        .inspect_err(|err| println!("Main failed: {err}"))
         .unwrap();
 
     // let sclk = peripherals.GPIO0;

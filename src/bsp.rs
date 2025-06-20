@@ -2,7 +2,7 @@ use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 use esp_hal::{
     gpio::{Output, OutputConfig},
-    peripherals::{Peripherals, GPIO5},
+    peripherals::Peripherals,
     rng::Rng,
     spi::{
         self,
@@ -17,15 +17,17 @@ use esp_wifi::{
     EspWifiController,
 };
 use max7219_async::Max7219;
+use thiserror::Error;
 
-use crate::{impl_from_variant, mk_static};
+use crate::mk_static;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum BoardError {
+    #[error("WiFi initialization failed")]
     WifiInitFail,
-    SpiConfigError(SpiConfigError),
+    #[error("SPI initialization error: {0}")]
+    SpiConfigError(#[from] SpiConfigError),
 }
-impl_from_variant!(BoardError, SpiConfigError, SpiConfigError);
 
 pub type BoardResult<T> = Result<T, BoardError>;
 pub type SharedDevice<P> = Mutex<CriticalSectionRawMutex, P>;

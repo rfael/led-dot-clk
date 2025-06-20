@@ -1,17 +1,18 @@
-use crate::{bsp::BoardError, display::DisplayError, impl_from_variant, ntp::NtpClientError, wifi::WifiError};
+use crate::{bsp::BoardError, display::DisplayError, ntp::NtpClientError, wifi::WifiError};
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
-    Board(BoardError),
-    WiFi(WifiError),
-    NtpClient(NtpClientError),
-    Display(DisplayError),
+    #[error("Board error: {0}")]
+    Board(#[from] BoardError),
+    #[error("WiFi error: {0}")]
+    WiFi(#[from] WifiError),
+    #[error("NTP error: {0}")]
+    NtpClient(#[from] NtpClientError),
+    #[error("Display error: {0}")]
+    Display(#[from] DisplayError),
+    #[error("Other error: {0}")]
     Other(&'static str),
 }
-impl_from_variant!(Error, Board, BoardError);
-impl_from_variant!(Error, WiFi, WifiError);
-impl_from_variant!(Error, NtpClient, NtpClientError);
-impl_from_variant!(Error, Display, DisplayError);
 
 impl Error {
     pub fn other(err: &'static str) -> Self {

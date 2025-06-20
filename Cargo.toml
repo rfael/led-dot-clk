@@ -53,6 +53,7 @@ sntpc = { version = "0.5.2", default-features = false, features = [
 chrono = { version = "0.4.41", default-features = false }
 max7219-async = "0.1.1"
 embedded-hal-bus = "0.3.0"
+thiserror = { version = "2.0.12", default-features = false }
 
 
 [profile.dev]

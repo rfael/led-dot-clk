@@ -14,8 +14,7 @@ use embassy_sync::{
 use embassy_time::{Duration, Ticker};
 use esp_println::println;
 use sntpc::{NtpContext, NtpTimestampGenerator};
-
-use crate::impl_from_variant;
+use thiserror::Error;
 
 const NTP_SERVER: &str = "pool.ntp.org";
 
@@ -36,12 +35,13 @@ impl NtpTimestampGenerator for Timestamp {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum NtpClientError {
-    SpawnError(SpawnError),
+    #[error("Spawnn error: {0}")]
+    SpawnError(#[from] SpawnError),
+    #[error("Other error: {0}")]
     Other(&'static str),
 }
-impl_from_variant!(NtpClientError, SpawnError, SpawnError);
 
 pub type NtpClientResult<T> = Result<T, NtpClientError>;
 
