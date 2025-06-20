@@ -8,13 +8,13 @@ use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
 use esp_println::println;
 
-use crate::{bsp::Board, ntp::NtpClient, wifi::WifiInterface};
+use crate::{bsp::Board, display::Display, ntp::NtpClient, wifi::WifiInterface};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
 mod bsp;
+mod display;
 mod error;
-mod max7219;
 mod ntp;
 mod utils;
 mod wifi;
@@ -69,6 +69,14 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
     esp_alloc::heap_allocator!(size: 72 * 1024);
 
     let mut board = Board::init(peripherals)?;
+
+    let max7219 = board
+        .take_max7219()
+        .ok_or(error::Error::other("No display device"))?;
+    let mut display = Display::init(max7219).await?;
+    println!("Display initialized");
+    display.write_i32(2137).await?;
+
 
     let wifi_interfaces = board
         .take_wifi_interfaces()

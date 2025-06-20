@@ -847,6 +847,7 @@ name = "led-dot-clk"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "embassy-embedded-hal",
  "embassy-executor",
  "embassy-futures",
  "embassy-net",
