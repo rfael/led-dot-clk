@@ -2,90 +2,88 @@
 #![no_main]
 
 use embassy_executor::Spawner;
-use embassy_net::StackResources;
 use embassy_time::{Duration, Timer};
 use esp_alloc as _;
 use esp_backtrace as _;
-use esp_hal::{clock::CpuClock, rng::Rng, timer::timg::TimerGroup};
+use esp_hal::clock::CpuClock;
 use esp_println::println;
-use esp_wifi::EspWifiController;
 
-use crate::{ntp::init_ntp_task, wifi::init_wifi_tasks};
+use crate::{bsp::Board, ntp::NtpClient, wifi::WifiInterface};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
+mod bsp;
+mod error;
+mod max7219;
 mod ntp;
 mod utils;
 mod wifi;
 
-// When you are okay with using a nightly compiler it's better to use https://docs.rs/static_cell/2.1.0/static_cell/macro.make_static.html
-macro_rules! mk_static {
-    ($t:ty,$val:expr) => {{
-        static STATIC_CELL: static_cell::StaticCell<$t> = static_cell::StaticCell::new();
-        #[deny(unused_attributes)]
-        let x = STATIC_CELL.uninit().write(($val));
-        x
-    }};
-}
-
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) -> ! {
+    fallible_main(spawner)
+        .await
+        .inspect_err(|err| println!("Main failed: {err:?}"))
+        .unwrap();
+
+    // let sclk = peripherals.GPIO0;
+    // let miso = peripherals.GPIO2;
+    // let mosi = peripherals.GPIO4;
+    // let cs = peripherals.GPIO5;
+    // let dma_channel = peripherals.DMA_CH0;
+    //
+    // let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) = dma_buffers!(32000);
+    // let dma_rx_buf = DmaRxBuf::new(rx_descriptors, rx_buffer).unwrap();
+    // let dma_tx_buf = DmaTxBuf::new(tx_descriptors, tx_buffer).unwrap();
+    //
+    // let mut spi = Spi::new(
+    //     peripherals.SPI2,
+    //     Config::default()
+    //         .with_frequency(Rate::from_khz(100))
+    //         .with_mode(Mode::_0),
+    // )
+    // .unwrap()
+    // .with_sck(sclk)
+    // .with_mosi(mosi)
+    // .with_miso(miso)
+    // // .with_cs(cs)
+    // .with_dma(dma_channel)
+    // .with_buffers(dma_rx_buf, dma_tx_buf);
+    // // .into_async();
+    //
+    // let delay = Delay::new();
+    // let bus = ExclusiveDevice::new(spi, cs, delay);
+    // let display = max7219_async::Max7219::new(bus);
+
+    loop {
+        Timer::after(Duration::from_millis(1_000)).await;
+        println!("tick...");
+    }
+}
+
+async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
     esp_println::logger::init_logger_from_env();
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
 
     esp_alloc::heap_allocator!(size: 72 * 1024);
 
-    let timg0 = TimerGroup::new(peripherals.TIMG0);
-    let mut rng = Rng::new(peripherals.RNG);
+    let mut board = Board::init(peripherals)?;
 
-    let esp_wifi_ctrl = &*mk_static!(
-        EspWifiController<'static>,
-        esp_wifi::init(timg0.timer0, rng, peripherals.RADIO_CLK).unwrap()
-    );
+    let wifi_interfaces = board
+        .take_wifi_interfaces()
+        .ok_or(error::Error::other("No WiFi interface"))?;
+    let wifi_controller = board
+        .take_wifi_controller()
+        .ok_or(error::Error::other("No WiFi controller"))?;
+    let wifi = WifiInterface::init(&spawner, board.rng(), wifi_interfaces, wifi_controller).await?;
 
-    let (controller, interfaces) = esp_wifi::wifi::new(esp_wifi_ctrl, peripherals.WIFI).unwrap();
-
-    let wifi_interface = interfaces.sta;
-
-    use esp_hal::timer::systimer::SystemTimer;
-    let systimer = SystemTimer::new(peripherals.SYSTIMER);
-    esp_hal_embassy::init(systimer.alarm0);
-
-    let config = embassy_net::Config::dhcpv4(Default::default());
-
-    let seed = (rng.random() as u64) << 32 | rng.random() as u64;
-
-    // Init network stack
-    let (stack, runner) = embassy_net::new(
-        wifi_interface,
-        config,
-        mk_static!(StackResources<3>, StackResources::<3>::new()),
-        seed,
-    );
-
-    init_wifi_tasks(&spawner, controller, runner).unwrap();
+    let mut ntp_client = NtpClient::launch(&spawner, wifi.stack())?;
 
     loop {
-        if stack.is_link_up() {
-            break;
-        }
-        Timer::after(Duration::from_millis(500)).await;
+        let time = ntp_client.changed().await;
+        println!("Received time: {time}");
     }
 
-    println!("Waiting to get IP address...");
-    loop {
-        if let Some(config) = stack.config_v4() {
-            println!("Got IP: {}", config.address);
-            break;
-        }
-        Timer::after(Duration::from_millis(500)).await;
-    }
-
-    init_ntp_task(&spawner, stack).unwrap();
-
-    loop {
-        Timer::after(Duration::from_millis(1_000)).await;
-        println!("tick...");
-    }
+    // Ok(())
 }

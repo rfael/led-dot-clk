@@ -1,11 +1,15 @@
 use core::net::{IpAddr, SocketAddr};
 
-use chrono::DateTime;
+use chrono::{DateTime, Utc};
 use embassy_executor::{SpawnError, Spawner};
 use embassy_net::{
     dns::DnsQueryType,
     udp::{PacketMetadata, UdpSocket},
     Stack,
+};
+use embassy_sync::{
+    blocking_mutex::raw::CriticalSectionRawMutex,
+    watch::{self, Watch},
 };
 use embassy_time::{Duration, Ticker};
 use esp_println::println;
@@ -33,18 +37,41 @@ impl NtpTimestampGenerator for Timestamp {
 }
 
 #[derive(Debug)]
-pub enum NtpError {
+pub enum NtpClientError {
     SpawnError(SpawnError),
+    Other(&'static str),
 }
-impl_from_variant!(NtpError, SpawnError, SpawnError);
+impl_from_variant!(NtpClientError, SpawnError, SpawnError);
 
-pub fn init_ntp_task(spawner: &Spawner, stack: Stack<'static>) -> Result<(), NtpError> {
-    spawner.spawn(ntp_task(stack))?;
-    Ok(())
+pub type NtpClientResult<T> = Result<T, NtpClientError>;
+
+pub struct NtpClient {
+    rx: watch::Receiver<'static, CriticalSectionRawMutex, DateTime<Utc>, 1>,
+}
+
+impl NtpClient {
+    pub fn launch(spawner: &Spawner, stack: Stack<'static>) -> NtpClientResult<Self> {
+        static WATCH: Watch<CriticalSectionRawMutex, DateTime<Utc>, 1> = Watch::new();
+        let rx = WATCH.receiver().ok_or(NtpClientError::Other(
+            "Can not get receiver end of watch channel",
+        ))?;
+
+        let me = Self { rx };
+        spawner.spawn(ntp_task(stack, WATCH.sender()))?;
+
+        Ok(me)
+    }
+
+    pub async fn changed(&mut self) -> DateTime<Utc> {
+        self.rx.changed().await
+    }
 }
 
 #[embassy_executor::task]
-async fn ntp_task(stack: Stack<'static>) {
+async fn ntp_task(
+    stack: Stack<'static>,
+    tx: watch::Sender<'static, CriticalSectionRawMutex, DateTime<Utc>, 1>,
+) {
     let mut rx_meta = [PacketMetadata::EMPTY; 16];
     let mut rx_buffer = [0; 4096];
     let mut tx_meta = [PacketMetadata::EMPTY; 16];
@@ -86,7 +113,7 @@ async fn ntp_task(stack: Stack<'static>) {
         };
 
         match DateTime::from_timestamp(time.seconds as _, 0) {
-            Some(dt) => println!("Time: {}", dt),
+            Some(dt) => tx.send(dt),
             None => println!("Time: {:?}", time),
         }
     }

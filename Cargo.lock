@@ -370,6 +370,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "embedded-hal-bus"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "513e0b3a8fb7d3013a8ae17a834283f170deaf7d0eeab0a7c1a36ad4dd356d22"
+dependencies = [
+ "critical-section",
+ "embedded-hal 1.0.0",
+]
+
+[[package]]
 name = "embedded-io"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -842,6 +852,8 @@ dependencies = [
  "embassy-net",
  "embassy-sync",
  "embassy-time",
+ "embedded-hal-async",
+ "embedded-hal-bus",
  "embedded-io",
  "embedded-io-async",
  "esp-alloc",
@@ -853,6 +865,7 @@ dependencies = [
  "esp-wifi",
  "heapless",
  "log",
+ "max7219-async",
  "sntpc",
  "static_cell",
 ]
@@ -889,6 +902,15 @@ name = "managed"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ca88d725a0a943b096803bd34e73a4437208b6077654cc4ecb2947a5f91618d"
+
+[[package]]
+name = "max7219-async"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "092ff7c30d65d2ac5165f3e75dba8f5ca4d51013fc4b79e91833fe84d91998ea"
+dependencies = [
+ "embedded-hal-async",
+]
 
 [[package]]
 name = "md-5"
