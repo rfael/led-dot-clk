@@ -15,6 +15,7 @@ esp_bootloader_esp_idf::esp_app_desc!();
 mod bsp;
 mod display;
 mod error;
+mod max7219_led_matrix;
 mod ntp;
 mod utils;
 mod wifi;
@@ -75,7 +76,7 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
         .ok_or(error::Error::other("No display device"))?;
     let mut display = Display::init(max7219).await?;
     println!("Display initialized");
-    display.write_i32(2137).await?;
+    display.write_time(21, 37).await?;
 
 
     let wifi_interfaces = board

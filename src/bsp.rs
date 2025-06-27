@@ -16,10 +16,9 @@ use esp_wifi::{
     wifi::{Interfaces, WifiController},
     EspWifiController,
 };
-use max7219_async::Max7219;
 use thiserror::Error;
 
-use crate::mk_static;
+use crate::{max7219_led_matrix::Max7219, mk_static};
 
 #[derive(Debug, Error)]
 pub enum BoardError {
