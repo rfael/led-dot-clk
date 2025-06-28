@@ -11,12 +11,8 @@ use esp_wifi::wifi::{
 };
 use thiserror::Error;
 
-use crate::mk_static;
+use crate::{config::{Config, WiFiConfig}, mk_static};
 
-const SSID: &str = env!("SSID");
-const PASSWORD: &str = env!("PASSWORD");
-
-const RECONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Error)]
 pub enum WifiError {
@@ -27,6 +23,7 @@ pub enum WifiError {
 pub type WifiResult<T> = Result<T, WifiError>;
 
 pub struct WifiInterface {
+    config: &'static Config,
     // controller: WifiController<'static>,
     stack: Stack<'static>,
 }
@@ -37,21 +34,22 @@ impl WifiInterface {
         mut rng: Rng,
         interfaces: Interfaces<'static>,
         controller: WifiController<'static>,
+        config: &'static Config,
     ) -> WifiResult<Self> {
         let wifi_interface = interfaces.sta;
 
-        let config = embassy_net::Config::dhcpv4(Default::default());
+        let net_config = embassy_net::Config::dhcpv4(Default::default());
 
         let seed = (rng.random() as u64) << 32 | rng.random() as u64;
 
         let (stack, runner) = embassy_net::new(
             wifi_interface,
-            config,
+            net_config,
             mk_static!(StackResources<3>, StackResources::<3>::new()),
             seed,
         );
 
-        let me = Self { stack };
+        let me = Self { config, stack };
 
         me.launch(spawner, runner, controller).await?;
 
@@ -64,7 +62,7 @@ impl WifiInterface {
         runner: Runner<'static, WifiDevice<'static>>,
         controller: WifiController<'static>,
     ) -> WifiResult<()> {
-        spawner.spawn(connection(controller))?;
+        spawner.spawn(connection(controller, self.config.wifi()))?;
         spawner.spawn(net_task(runner))?;
 
         let mut ticker = Ticker::every(Duration::from_millis(500));
@@ -91,20 +89,20 @@ impl WifiInterface {
 }
 
 #[embassy_executor::task]
-async fn connection(mut controller: WifiController<'static>) {
+async fn connection(mut controller: WifiController<'static>, config: &'static WiFiConfig) {
     println!("start connection task");
     println!("Device capabilities: {:?}", controller.capabilities());
     loop {
         if esp_wifi::wifi::wifi_state() == WifiState::StaConnected {
             // wait until we're no longer connected
             controller.wait_for_event(WifiEvent::StaDisconnected).await;
-            Timer::after(RECONNECT_TIMEOUT).await
+            Timer::after(config.reconnect_timeout()).await
         }
 
         if !matches!(controller.is_started(), Ok(true)) {
             let client_config = Configuration::Client(ClientConfiguration {
-                ssid: SSID.into(),
-                password: PASSWORD.into(),
+                ssid: config.ssid().into(),
+                password: config.password().into(),
                 ..Default::default()
             });
             controller.set_configuration(&client_config).unwrap();
@@ -124,7 +122,7 @@ async fn connection(mut controller: WifiController<'static>) {
             Ok(_) => println!("Wifi connected!"),
             Err(e) => {
                 println!("Failed to connect to wifi: {e:?}");
-                Timer::after(RECONNECT_TIMEOUT).await
+                Timer::after(config.reconnect_timeout()).await
             }
         }
     }

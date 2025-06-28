@@ -1,5 +1,4 @@
 use embedded_hal_async::spi::SpiDevice;
-use esp_println::println;
 
 const DISPLAYS_NUM: usize = 4;
 
@@ -53,9 +52,9 @@ where
         }
     }
 
-    pub fn devices_num(&self) -> usize {
-        DISPLAYS_NUM
-    }
+    // pub fn devices_num(&self) -> usize {
+    //     DISPLAYS_NUM
+    // }
 
     async fn write_register(&mut self, register: u8, data: u8) -> Result<(), SPI::Error> {
         let mut buffer = [0x00; 2 * DISPLAYS_NUM];

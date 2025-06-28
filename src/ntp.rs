@@ -16,7 +16,7 @@ use esp_println::println;
 use sntpc::{NtpContext, NtpTimestampGenerator};
 use thiserror::Error;
 
-const NTP_SERVER: &str = "pool.ntp.org";
+use crate::config::{Config, NtpClientConfig};
 
 #[derive(Copy, Clone, Default)]
 struct Timestamp {
@@ -50,14 +50,18 @@ pub struct NtpClient {
 }
 
 impl NtpClient {
-    pub fn launch(spawner: &Spawner, stack: Stack<'static>) -> NtpClientResult<Self> {
+    pub fn launch(
+        spawner: &Spawner,
+        stack: Stack<'static>,
+        config: &'static Config,
+    ) -> NtpClientResult<Self> {
         static WATCH: Watch<CriticalSectionRawMutex, DateTime<Utc>, 1> = Watch::new();
         let rx = WATCH.receiver().ok_or(NtpClientError::Other(
             "Can not get receiver end of watch channel",
         ))?;
 
         let me = Self { rx };
-        spawner.spawn(ntp_task(stack, WATCH.sender()))?;
+        spawner.spawn(ntp_task(stack, WATCH.sender(), config.ntp_client()))?;
 
         Ok(me)
     }
@@ -71,6 +75,7 @@ impl NtpClient {
 async fn ntp_task(
     stack: Stack<'static>,
     tx: watch::Sender<'static, CriticalSectionRawMutex, DateTime<Utc>, 1>,
+    config: &'static NtpClientConfig,
 ) {
     let mut rx_meta = [PacketMetadata::EMPTY; 16];
     let mut rx_buffer = [0; 4096];
@@ -89,14 +94,15 @@ async fn ntp_task(
     let context = NtpContext::new(Timestamp::default());
 
     let ntp_addrs = stack
-        .dns_query(NTP_SERVER, DnsQueryType::A)
+        .dns_query(config.server(), DnsQueryType::A)
         .await
         .expect("Failed to resolve DNS");
     if ntp_addrs.is_empty() {
         panic!("Failed to resolve DNS");
     }
 
-    let mut ticker = Ticker::every(Duration::from_secs(5));
+    let mut ticker = Ticker::every(config.query_period());
+    ticker.reset_after(Duration::MIN);
     loop {
         ticker.next().await;
 

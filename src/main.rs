@@ -8,11 +8,18 @@ use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
 use esp_println::println;
 
-use crate::{bsp::Board, display::Display, ntp::NtpClient, wifi::WifiInterface};
+use crate::{
+    bsp::Board,
+    config::Config,
+    display::{Display, DisplayCommad},
+    ntp::NtpClient,
+    wifi::WifiInterface,
+};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
 mod bsp;
+mod config;
 mod display;
 mod error;
 mod max7219_led_matrix;
@@ -70,14 +77,17 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
     esp_alloc::heap_allocator!(size: 72 * 1024);
 
     let mut board = Board::init(peripherals)?;
+    let config = Config::get();
 
     let max7219 = board
         .take_max7219()
         .ok_or(error::Error::other("No display device"))?;
-    let mut display = Display::init(max7219).await?;
+    let mut display = Display::init(max7219, config).await?;
     println!("Display initialized");
-    display.write_time(21, 37).await?;
-
+    display.set_intensity(0x01).await?;
+    let display_tx = display.launch(&spawner).await?;
+    display_tx.send(DisplayCommad::Clear).await;
+    display_tx.send(DisplayCommad::ShowText("elo!")).await;
 
     let wifi_interfaces = board
         .take_wifi_interfaces()
@@ -85,13 +95,21 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
     let wifi_controller = board
         .take_wifi_controller()
         .ok_or(error::Error::other("No WiFi controller"))?;
-    let wifi = WifiInterface::init(&spawner, board.rng(), wifi_interfaces, wifi_controller).await?;
+    let wifi = WifiInterface::init(
+        &spawner,
+        board.rng(),
+        wifi_interfaces,
+        wifi_controller,
+        config,
+    )
+    .await?;
 
-    let mut ntp_client = NtpClient::launch(&spawner, wifi.stack())?;
+    let mut ntp_client = NtpClient::launch(&spawner, wifi.stack(), config)?;
 
     loop {
         let time = ntp_client.changed().await;
-        println!("Received time: {time}");
+        println!("NTP time update: {time}");
+        display_tx.send(time.into()).await;
     }
 
     // Ok(())
