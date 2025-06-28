@@ -1,0 +1,14 @@
+diff --git a/esp-hal/ld/esp32c2/rom_functions.x b/esp-hal/ld/esp32c2/rom_functions.x
+new file mode 100644
+index 00000000..67ca73f2
+--- /dev/null
++++ b/esp-hal/ld/esp32c2/rom_functions.x
+@@ -0,0 +1,8 @@
++INCLUDE "rom/esp32c2.rom.api.ld"
++INCLUDE "rom/esp32c2.rom.heap.ld"
++INCLUDE "rom/esp32c2.rom.ld"
++INCLUDE "rom/esp32c2.rom.libgcc.ld"
++INCLUDE "rom/esp32c2.rom.rvfp.ld"
++INCLUDE "rom/esp32c2.rom.version.ld"
++
++INCLUDE "rom/additional.ld"
