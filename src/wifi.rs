@@ -11,8 +11,10 @@ use esp_wifi::wifi::{
 };
 use thiserror::Error;
 
-use crate::{config::{Config, WiFiConfig}, mk_static};
-
+use crate::{
+    config::{Config, WiFiConfig},
+    mk_static,
+};
 
 #[derive(Debug, Error)]
 pub enum WifiError {
