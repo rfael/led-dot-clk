@@ -1,7 +1,9 @@
 #![no_std]
 #![no_main]
 
+use chrono::{DateTime, TimeDelta, Timelike};
 use embassy_executor::Spawner;
+use embassy_futures::select::{select, Either};
 use embassy_time::{Duration, Timer};
 use esp_alloc as _;
 use esp_backtrace as _;
@@ -106,10 +108,22 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
 
     let mut ntp_client = NtpClient::launch(&spawner, wifi.stack(), config)?;
 
+    let mut time = DateTime::from_timestamp(0, 0).unwrap_or_default();
+    let mut timeout = Duration::from_secs(60);
     loop {
-        let time = ntp_client.changed().await;
-        println!("NTP time update: {time}");
-        display_tx.send(time.into()).await;
+        match select(ntp_client.changed(), Timer::after(timeout)).await {
+            Either::First(t) => {
+                time = t;
+                println!("NTP time update: {time}");
+                display_tx.send(time.into()).await;
+                timeout = Duration::from_secs(60 - time.second() as u64);
+            }
+            Either::Second(_) => {
+                timeout = Duration::from_secs(60);
+                time += TimeDelta::minutes(1);
+                display_tx.send(time.into()).await;
+            }
+        }
     }
 
     // Ok(())

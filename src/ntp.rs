@@ -77,6 +77,8 @@ async fn ntp_task(
     tx: watch::Sender<'static, CriticalSectionRawMutex, DateTime<Utc>, 1>,
     config: &'static NtpClientConfig,
 ) {
+    const RETRY_TIMEOUT: Duration = Duration::from_secs(10);
+
     let mut rx_meta = [PacketMetadata::EMPTY; 16];
     let mut rx_buffer = [0; 4096];
     let mut tx_meta = [PacketMetadata::EMPTY; 16];
@@ -101,8 +103,7 @@ async fn ntp_task(
         panic!("Failed to resolve DNS");
     }
 
-    let mut ticker = Ticker::every(config.query_period());
-    ticker.reset_after(Duration::MIN);
+    let mut ticker = Ticker::every(RETRY_TIMEOUT);
     loop {
         ticker.next().await;
 
@@ -111,9 +112,13 @@ async fn ntp_task(
 
         let result = sntpc::get_time(addr, &socket, context).await;
         let time = match result {
-            Ok(time) => time,
+            Ok(time) => {
+                ticker = Ticker::every(config.query_period());
+                time
+            }
             Err(err) => {
                 println!("Error getting time: {err:?}");
+                ticker = Ticker::every(RETRY_TIMEOUT);
                 continue;
             }
         };
