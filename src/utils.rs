@@ -29,7 +29,7 @@
 /// to `Message::Text`, and `From<i32>` for `Message` converting an `i32` to `Message::Integer`.
 #[macro_export]
 macro_rules! impl_from_variant {
-    ($dst_enum:ident, $variant:ident, $payload:ident) => {
+    ($dst_enum:ident, $variant:ident, $payload:ty) => {
         impl From<$payload> for $dst_enum {
             fn from(value: $payload) -> Self {
                 Self::$variant(value)

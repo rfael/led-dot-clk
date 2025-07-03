@@ -1,30 +1,21 @@
 #![no_std]
 #![no_main]
 
-use chrono::{DateTime, TimeDelta, Timelike};
+use chrono::Timelike;
 use embassy_executor::Spawner;
-use embassy_futures::select::{select, Either};
 use embassy_time::{Duration, Timer};
 use esp_alloc as _;
 use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
 use esp_println::println;
 
-use crate::{
-    bsp::Board,
-    config::Config,
-    display::{Display, DisplayCommad},
-    ntp::NtpClient,
-    wifi::WifiInterface,
-};
+use crate::{bsp::Board, config::Config, ntp::NtpClient, wifi::WifiInterface};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
 mod bsp;
 mod config;
-mod display;
 mod error;
-mod max7219_led_matrix;
 mod ntp;
 mod utils;
 mod wifi;
@@ -78,18 +69,28 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
 
     esp_alloc::heap_allocator!(size: 72 * 1024);
 
-    let mut board = Board::init(peripherals)?;
+    let mut board = Board::init(peripherals).await?;
     let config = Config::get();
 
-    let max7219 = board
-        .take_max7219()
-        .ok_or(error::Error::other("No display device"))?;
-    let mut display = Display::init(max7219, config).await?;
-    println!("Display initialized");
-    display.set_intensity(0x01).await?;
-    let display_tx = display.launch(&spawner).await?;
-    display_tx.send(DisplayCommad::Clear).await;
-    display_tx.send(DisplayCommad::ShowText("elo!")).await;
+    {
+        let datetime = board
+            .rtc()
+            .lock()
+            .await
+            .datetime()
+            .await
+            .map_err(|_| error::Error::Other("Failed to get initial RTC time"))?
+            .and_utc();
+        let datetime = datetime.with_timezone(&config.timezone());
+        println!("Initial RTC time: {datetime}");
+        board
+            .display()
+            .lock()
+            .await
+            .write_time(datetime.time())
+            .await
+            .map_err(|_| error::Error::Other("Failed to display initial time"))?;
+    }
 
     let wifi_interfaces = board
         .take_wifi_interfaces()
@@ -106,22 +107,38 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
     )
     .await?;
 
-    let mut ntp_client = NtpClient::launch(&spawner, wifi.stack(), config)?;
+    let ntp_client = NtpClient::new(wifi.stack(), config.ntp_client(), board.rtc());
+    ntp_client.launch(&spawner)?;
 
-    let mut time = DateTime::from_timestamp(0, 0).unwrap_or_default();
-    let mut timeout = Duration::from_secs(60);
+    const RETRY_TIMEOUT: Duration = Duration::from_secs(10);
+
+    let mut timeout = Duration::from_secs(0);
     loop {
-        match select(ntp_client.changed(), Timer::after(timeout)).await {
-            Either::First(t) => {
-                time = t;
-                println!("NTP time update: {time}");
-                display_tx.send(time.into()).await;
-                timeout = Duration::from_secs(60 - time.second() as u64);
+        Timer::after(timeout).await;
+        let datetime = match board.rtc().lock().await.datetime().await {
+            Ok(dt) => dt.and_utc().with_timezone(&config.timezone()),
+            Err(err) => {
+                println!("Failed to fetch time from RTC: {err:?}");
+                timeout = RETRY_TIMEOUT;
+                continue;
             }
-            Either::Second(_) => {
-                timeout = Duration::from_secs(60);
-                time += TimeDelta::minutes(1);
-                display_tx.send(time.into()).await;
+        };
+
+        println!("Time to display: {datetime}");
+
+        match board
+            .display()
+            .lock()
+            .await
+            .write_time(datetime.time())
+            .await
+        {
+            Ok(()) => {
+                timeout = Duration::from_secs(60 - datetime.second() as u64);
+            }
+            Err(err) => {
+                println!("Failed to display time: {err}");
+                timeout = RETRY_TIMEOUT;
             }
         }
     }

@@ -1,7 +1,9 @@
+use ds3231::{Config as RtcConfig, DS3231Error, SquareWaveFrequency, TimeRepresentation, DS3231};
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 use esp_hal::{
     gpio::{Output, OutputConfig},
+    i2c::master::{Config as I2cConfig, ConfigError as I2cConfigError, Error as I2cError, I2c},
     peripherals::Peripherals,
     rng::Rng,
     spi::{
@@ -18,7 +20,16 @@ use esp_wifi::{
 };
 use thiserror::Error;
 
-use crate::{max7219_led_matrix::Max7219, mk_static};
+use crate::{
+    bsp::{
+        display::{Display, DisplayError},
+        max7219_led_matrix::Max7219,
+    },
+    impl_from_variant, mk_static,
+};
+
+pub mod display;
+mod max7219_led_matrix;
 
 #[derive(Debug, Error)]
 pub enum BoardError {
@@ -26,21 +37,31 @@ pub enum BoardError {
     WifiInitFail,
     #[error("SPI initialization error: {0}")]
     SpiConfigError(#[from] SpiConfigError),
+    #[error("I2C initialization error: {0}")]
+    I2CConfigError(#[from] I2cConfigError),
+    #[error("Display error: {0}")]
+    DisplayError(#[from] DisplayError),
+    #[error("RTC error: {0:?}")]
+    RtcError(DS3231Error<I2cError>),
 }
+impl_from_variant!(BoardError, RtcError, DS3231Error<I2cError>);
 
 pub type BoardResult<T> = Result<T, BoardError>;
 pub type SharedDevice<P> = Mutex<CriticalSectionRawMutex, P>;
 pub type SpiDev = SpiDevice<'static, CriticalSectionRawMutex, Spi<'static, Async>, Output<'static>>;
 
+pub type RtcDevice = DS3231<I2c<'static, Async>>;
+
 pub struct Board {
     rng: Rng,
     wifi_controller: Option<WifiController<'static>>,
     wifi_interfaces: Option<Interfaces<'static>>,
-    max7219: Option<Max7219<SpiDev>>,
+    display: &'static SharedDevice<Display>,
+    rtc: &'static SharedDevice<RtcDevice>,
 }
 
 impl Board {
-    pub fn init(peripherals: Peripherals) -> BoardResult<Self> {
+    pub async fn init(peripherals: Peripherals) -> BoardResult<Self> {
         let timg0 = TimerGroup::new(peripherals.TIMG0);
         let rng = Rng::new(peripherals.RNG);
 
@@ -77,12 +98,37 @@ impl Board {
         let spi_device = SpiDevice::new(spi_bus, cs);
 
         let max7219 = Max7219::new(spi_device);
+        let mut display = Display::init(max7219).await?;
+        display.set_intensity(0x01).await?;
+        let display = mk_static!(SharedDevice<Display>, Mutex::new(display));
+
+        // DS3231
+        let sda = peripherals.GPIO10;
+        let scl = peripherals.GPIO18;
+        let i2c = I2c::new(
+            peripherals.I2C0,
+            I2cConfig::default().with_frequency(Rate::from_khz(100)),
+        )?
+        .with_sda(sda)
+        .with_scl(scl)
+        .into_async();
+        let mut rtc = DS3231::new(i2c, 0x68);
+        let rtc_config = RtcConfig {
+            time_representation: TimeRepresentation::TwentyFourHour,
+            square_wave_frequency: SquareWaveFrequency::Hz8192,
+            interrupt_control: ds3231::InterruptControl::SquareWave,
+            battery_backed_square_wave: false,
+            oscillator_enable: ds3231::Oscillator::Disabled,
+        };
+        rtc.configure(&rtc_config).await?;
+        let rtc = mk_static!(SharedDevice<DS3231<I2c<Async>>>, Mutex::new(rtc));
 
         let me = Self {
             rng,
             wifi_controller: Some(wifi_controller),
             wifi_interfaces: Some(wifi_interfaces),
-            max7219: Some(max7219),
+            display,
+            rtc,
         };
 
         Ok(me)
@@ -100,7 +146,11 @@ impl Board {
         self.wifi_interfaces.take()
     }
 
-    pub fn take_max7219(&mut self) -> Option<Max7219<SpiDev>> {
-        self.max7219.take()
+    pub fn display(&self) -> &'static SharedDevice<Display> {
+        self.display
+    }
+
+    pub fn rtc(&self) -> &'static SharedDevice<RtcDevice> {
+        self.rtc
     }
 }

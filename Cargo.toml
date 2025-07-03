@@ -53,6 +53,7 @@ sntpc = { version = "0.5.2", default-features = false, features = [
 chrono = { version = "0.4.41", default-features = false }
 embedded-hal-bus = "0.3.0"
 thiserror = { version = "2.0.12", default-features = false }
+ds3231 = { version = "0.3.0", features = ["async", "temperature_f32"] }
 
 
 [profile.dev]

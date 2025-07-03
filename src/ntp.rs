@@ -1,22 +1,21 @@
 use core::net::{IpAddr, SocketAddr};
 
-use chrono::{DateTime, Utc};
+use chrono::DateTime;
 use embassy_executor::{SpawnError, Spawner};
 use embassy_net::{
     dns::DnsQueryType,
     udp::{PacketMetadata, UdpSocket},
     Stack,
 };
-use embassy_sync::{
-    blocking_mutex::raw::CriticalSectionRawMutex,
-    watch::{self, Watch},
-};
 use embassy_time::{Duration, Ticker};
 use esp_println::println;
 use sntpc::{NtpContext, NtpTimestampGenerator};
 use thiserror::Error;
 
-use crate::config::{Config, NtpClientConfig};
+use crate::{
+    bsp::{RtcDevice, SharedDevice},
+    config::NtpClientConfig,
+};
 
 #[derive(Copy, Clone, Default)]
 struct Timestamp {
@@ -39,44 +38,33 @@ impl NtpTimestampGenerator for Timestamp {
 pub enum NtpClientError {
     #[error("Spawnn error: {0}")]
     SpawnError(#[from] SpawnError),
-    #[error("Other error: {0}")]
-    Other(&'static str),
 }
 
 pub type NtpClientResult<T> = Result<T, NtpClientError>;
 
 pub struct NtpClient {
-    rx: watch::Receiver<'static, CriticalSectionRawMutex, DateTime<Utc>, 1>,
+    stack: Stack<'static>,
+    config: &'static NtpClientConfig,
+    rtc: &'static SharedDevice<RtcDevice>,
 }
 
 impl NtpClient {
-    pub fn launch(
-        spawner: &Spawner,
+    pub fn new(
         stack: Stack<'static>,
-        config: &'static Config,
-    ) -> NtpClientResult<Self> {
-        static WATCH: Watch<CriticalSectionRawMutex, DateTime<Utc>, 1> = Watch::new();
-        let rx = WATCH.receiver().ok_or(NtpClientError::Other(
-            "Can not get receiver end of watch channel",
-        ))?;
-
-        let me = Self { rx };
-        spawner.spawn(ntp_task(stack, WATCH.sender(), config.ntp_client()))?;
-
-        Ok(me)
+        config: &'static NtpClientConfig,
+        rtc: &'static SharedDevice<RtcDevice>,
+    ) -> Self {
+        Self { stack, config, rtc }
     }
 
-    pub async fn changed(&mut self) -> DateTime<Utc> {
-        self.rx.changed().await
+    pub fn launch(self, spawner: &Spawner) -> NtpClientResult<()> {
+        spawner.spawn(ntp_task(self))?;
+        Ok(())
     }
 }
 
 #[embassy_executor::task]
-async fn ntp_task(
-    stack: Stack<'static>,
-    tx: watch::Sender<'static, CriticalSectionRawMutex, DateTime<Utc>, 1>,
-    config: &'static NtpClientConfig,
-) {
+async fn ntp_task(client: NtpClient) {
     const RETRY_TIMEOUT: Duration = Duration::from_secs(10);
 
     let mut rx_meta = [PacketMetadata::EMPTY; 16];
@@ -85,7 +73,7 @@ async fn ntp_task(
     let mut tx_buffer = [0; 4096];
 
     let mut socket = UdpSocket::new(
-        stack,
+        client.stack,
         &mut rx_meta,
         &mut rx_buffer,
         &mut tx_meta,
@@ -95,8 +83,9 @@ async fn ntp_task(
 
     let context = NtpContext::new(Timestamp::default());
 
-    let ntp_addrs = stack
-        .dns_query(config.server(), DnsQueryType::A)
+    let ntp_addrs = client
+        .stack
+        .dns_query(client.config.server(), DnsQueryType::A)
         .await
         .expect("Failed to resolve DNS");
     if ntp_addrs.is_empty() {
@@ -110,10 +99,11 @@ async fn ntp_task(
         let addr: IpAddr = ntp_addrs[0].into();
         let addr = SocketAddr::from((addr, 123));
 
+        println!("NTP server query...");
         let result = sntpc::get_time(addr, &socket, context).await;
         let time = match result {
             Ok(time) => {
-                ticker = Ticker::every(config.query_period());
+                ticker = Ticker::every(client.config.query_period());
                 time
             }
             Err(err) => {
@@ -123,9 +113,23 @@ async fn ntp_task(
             }
         };
 
-        match DateTime::from_timestamp(time.seconds as _, 0) {
-            Some(dt) => tx.send(dt),
-            None => println!("Time: {:?}", time),
+        let Some(time) = DateTime::from_timestamp(time.seconds as _, 0) else {
+            println!("Failed to convert NTP response to DateTime");
+            ticker = Ticker::every(RETRY_TIMEOUT);
+            continue;
+        };
+        println!("Time received from NTP server: {time}");
+
+        if let Err(err) = client
+            .rtc
+            .lock()
+            .await
+            .set_datetime(&time.naive_utc())
+            .await
+        {
+            println!("Updating time in RTC failed: {err:?}");
+            ticker = Ticker::every(RETRY_TIMEOUT);
+            continue;
         }
     }
 }

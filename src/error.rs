@@ -1,4 +1,4 @@
-use crate::{bsp::BoardError, display::DisplayError, ntp::NtpClientError, wifi::WifiError};
+use crate::{bsp::BoardError, ntp::NtpClientError, wifi::WifiError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -8,8 +8,6 @@ pub enum Error {
     WiFi(#[from] WifiError),
     #[error("NTP error: {0}")]
     NtpClient(#[from] NtpClientError),
-    #[error("Display error: {0}")]
-    Display(#[from] DisplayError),
     #[error("Other error: {0}")]
     Other(&'static str),
 }
