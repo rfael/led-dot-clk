@@ -8,7 +8,6 @@ use embassy_net::{
     Stack,
 };
 use embassy_time::{Duration, Ticker};
-use esp_println::println;
 use sntpc::{NtpContext, NtpTimestampGenerator};
 use thiserror::Error;
 
@@ -99,7 +98,7 @@ async fn ntp_task(client: NtpClient) {
         let addr: IpAddr = ntp_addrs[0].into();
         let addr = SocketAddr::from((addr, 123));
 
-        println!("NTP server query...");
+        log::info!("NTP server query...");
         let result = sntpc::get_time(addr, &socket, context).await;
         let time = match result {
             Ok(time) => {
@@ -107,18 +106,18 @@ async fn ntp_task(client: NtpClient) {
                 time
             }
             Err(err) => {
-                println!("Error getting time: {err:?}");
+                log::error!("Error getting time: {err:?}");
                 ticker = Ticker::every(RETRY_TIMEOUT);
                 continue;
             }
         };
 
         let Some(time) = DateTime::from_timestamp(time.seconds as _, 0) else {
-            println!("Failed to convert NTP response to DateTime");
+            log::error!("Failed to convert NTP response to DateTime");
             ticker = Ticker::every(RETRY_TIMEOUT);
             continue;
         };
-        println!("Time received from NTP server: {time}");
+        log::info!("Time received from NTP server: {time}");
 
         if let Err(err) = client
             .rtc
@@ -127,7 +126,7 @@ async fn ntp_task(client: NtpClient) {
             .set_datetime(&time.naive_utc())
             .await
         {
-            println!("Updating time in RTC failed: {err:?}");
+            log::error!("Updating time in RTC failed: {err:?}");
             ticker = Ticker::every(RETRY_TIMEOUT);
             continue;
         }

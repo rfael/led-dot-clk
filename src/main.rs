@@ -7,7 +7,6 @@ use embassy_time::{Duration, Timer};
 use esp_alloc as _;
 use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
-use esp_println::println;
 
 use crate::{bsp::Board, config::Config, ntp::NtpClient, wifi::WifiInterface};
 
@@ -17,6 +16,7 @@ mod bsp;
 mod config;
 mod error;
 mod ntp;
+mod system;
 mod utils;
 mod wifi;
 
@@ -24,7 +24,7 @@ mod wifi;
 async fn main(spawner: Spawner) -> ! {
     fallible_main(spawner)
         .await
-        .inspect_err(|err| println!("Main failed: {err}"))
+        .inspect_err(|err| log::error!("Main failed: {err}"))
         .unwrap();
 
     // let sclk = peripherals.GPIO0;
@@ -58,7 +58,7 @@ async fn main(spawner: Spawner) -> ! {
 
     loop {
         Timer::after(Duration::from_millis(1_000)).await;
-        println!("tick...");
+        log::debug!("tick...");
     }
 }
 
@@ -82,7 +82,7 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
             .map_err(|_| error::Error::Other("Failed to get initial RTC time"))?
             .and_utc();
         let datetime = datetime.with_timezone(&config.timezone());
-        println!("Initial RTC time: {datetime}");
+        log::info!("Initial RTC time: {datetime}");
         board
             .display()
             .lock()
@@ -118,13 +118,13 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
         let datetime = match board.rtc().lock().await.datetime().await {
             Ok(dt) => dt.and_utc().with_timezone(&config.timezone()),
             Err(err) => {
-                println!("Failed to fetch time from RTC: {err:?}");
+                log::error!("Failed to fetch time from RTC: {err:?}");
                 timeout = RETRY_TIMEOUT;
                 continue;
             }
         };
 
-        println!("Time to display: {datetime}");
+        log::info!("Time to display: {datetime}");
 
         match board
             .display()
@@ -137,7 +137,7 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
                 timeout = Duration::from_secs(60 - datetime.second() as u64);
             }
             Err(err) => {
-                println!("Failed to display time: {err}");
+                log::error!("Failed to display time: {err}");
                 timeout = RETRY_TIMEOUT;
             }
         }

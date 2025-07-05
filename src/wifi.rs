@@ -4,7 +4,6 @@ use embassy_time::{Duration, Ticker, Timer};
 use esp_alloc as _;
 use esp_backtrace as _;
 use esp_hal::rng::Rng;
-use esp_println::println;
 use esp_wifi::wifi::{
     ClientConfiguration, Configuration, Interfaces, WifiController, WifiDevice, WifiEvent,
     WifiState,
@@ -69,14 +68,14 @@ impl WifiInterface {
 
         let mut ticker = Ticker::every(Duration::from_millis(500));
         while !self.stack.is_link_up() {
-            println!("Wait for WiFi interface link up");
+            log::info!("Wait for WiFi interface link up");
             ticker.next().await;
         }
 
-        println!("Waiting to get IP address...");
+        log::info!("Waiting to get IP address...");
         loop {
             if let Some(config) = self.stack.config_v4() {
-                println!("Got IP: {}", config.address);
+                log::info!("Got IP: {}", config.address);
                 break;
             }
             ticker.next().await;
@@ -92,8 +91,8 @@ impl WifiInterface {
 
 #[embassy_executor::task]
 async fn connection(mut controller: WifiController<'static>, config: &'static WiFiConfig) {
-    println!("start connection task");
-    println!("Device capabilities: {:?}", controller.capabilities());
+    log::debug!("start connection task");
+    log::debug!("Device capabilities: {:?}", controller.capabilities());
     loop {
         if esp_wifi::wifi::wifi_state() == WifiState::StaConnected {
             // wait until we're no longer connected
@@ -108,22 +107,22 @@ async fn connection(mut controller: WifiController<'static>, config: &'static Wi
                 ..Default::default()
             });
             controller.set_configuration(&client_config).unwrap();
-            println!("Starting wifi");
+            log::info!("Starting wifi");
             controller.start_async().await.unwrap();
-            println!("Wifi started!");
+            log::info!("Wifi started!");
 
-            println!("Scan");
+            log::debug!("Scan");
             let result = controller.scan_n_async(10).await.unwrap();
             for ap in result {
-                println!("{:?}", ap);
+                log::debug!("{ap:?}");
             }
         }
-        println!("About to connect...");
+        log::info!("About to connect...");
 
         match controller.connect_async().await {
-            Ok(_) => println!("Wifi connected!"),
+            Ok(_) => log::info!("Wifi connected!"),
             Err(e) => {
-                println!("Failed to connect to wifi: {e:?}");
+                log::error!("Failed to connect to wifi: {e:?}");
                 Timer::after(config.reconnect_timeout()).await
             }
         }

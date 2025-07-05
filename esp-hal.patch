@@ -1,3 +1,12 @@
+diff --git a/esp-hal/ld/esp32c2/linkall.x b/esp-hal/ld/esp32c2/linkall.x
+index ec091781..fce29bb3 100644
+--- a/esp-hal/ld/esp32c2/linkall.x
++++ b/esp-hal/ld/esp32c2/linkall.x
+@@ -8,3 +8,4 @@ REGION_ALIAS("RWTEXT", IRAM);
+
+ INCLUDE "esp32c2.x"
+ INCLUDE "hal-defaults.x"
++INCLUDE "rom_functions.x"
 diff --git a/esp-hal/ld/esp32c2/rom_functions.x b/esp-hal/ld/esp32c2/rom_functions.x
 new file mode 100644
 index 00000000..67ca73f2

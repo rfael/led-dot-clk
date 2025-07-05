@@ -28,7 +28,9 @@ esp-wifi = { path = "./esp-hal/esp-wifi", features = [
     "esp-alloc",
     "wifi",
 ] }
-esp-bootloader-esp-idf = { path = "./esp-hal/esp-bootloader-esp-idf" }
+esp-bootloader-esp-idf = { path = "./esp-hal/esp-bootloader-esp-idf", features = [
+    "esp32c2",
+] }
 esp-hal-embassy = { path = "./esp-hal/esp-hal-embassy", features = ["esp32c2"] }
 embassy-executor = { version = "0.7.0", features = ["task-arena-size-20480"] }
 embassy-futures = "0.1.1"
