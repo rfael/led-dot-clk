@@ -20,16 +20,11 @@ use esp_wifi::{
 };
 use thiserror::Error;
 
-use crate::{
-    bsp::{
-        display::{Display, DisplayError},
-        max7219_led_matrix::Max7219,
-    },
-    impl_from_variant, mk_static,
-};
+use crate::{impl_from_variant, mk_static};
 
-pub mod display;
 mod max7219_led_matrix;
+
+pub use max7219_led_matrix::Max7219;
 
 #[derive(Debug, Error)]
 pub enum BoardError {
@@ -39,8 +34,6 @@ pub enum BoardError {
     SpiConfigError(#[from] SpiConfigError),
     #[error("I2C initialization error: {0}")]
     I2CConfigError(#[from] I2cConfigError),
-    #[error("Display error: {0}")]
-    DisplayError(#[from] DisplayError),
     #[error("RTC error: {0:?}")]
     RtcError(DS3231Error<I2cError>),
 }
@@ -56,7 +49,7 @@ pub struct Board {
     rng: Rng,
     wifi_controller: Option<WifiController<'static>>,
     wifi_interfaces: Option<Interfaces<'static>>,
-    display: &'static SharedDevice<Display>,
+    display: &'static SharedDevice<Max7219<SpiDev>>,
     rtc: &'static SharedDevice<RtcDevice>,
 }
 
@@ -98,9 +91,7 @@ impl Board {
         let spi_device = SpiDevice::new(spi_bus, cs);
 
         let max7219 = Max7219::new(spi_device);
-        let mut display = Display::init(max7219).await?;
-        display.set_intensity(0x01).await?;
-        let display = mk_static!(SharedDevice<Display>, Mutex::new(display));
+        let display = mk_static!(SharedDevice<Max7219<SpiDev>>, Mutex::new(max7219));
 
         // DS3231
         let sda = peripherals.GPIO10;
@@ -146,7 +137,7 @@ impl Board {
         self.wifi_interfaces.take()
     }
 
-    pub fn display(&self) -> &'static SharedDevice<Display> {
+    pub fn display(&self) -> &'static SharedDevice<Max7219<SpiDev>> {
         self.display
     }
 

@@ -1,19 +1,15 @@
 [target.riscv32imc-unknown-none-elf]
 runner = "espflash flash --monitor"
 
-
 [env]
-ESP_LOG="info"
+ESP_LOG="debug"
 
 [build]
 rustflags = [
   # "-C", "link-arg=-Tlinkall.x",
   # "-C", "link-arg=--nmagic",
 
-  # This line is required to prevent link errors if using `esp-wifi`, but will cause link errors if not.
-  # "-C", "link-arg=-Trom_functions.x",
-
-  # Required to obtain backtraces (e.g. when using the "esp-backtrace" crate.)
+  # Required to obtain backtrace (e.g. When using the "esp-backtrace" crate.)
   # NOTE: May negatively impact performance of produced code
   "-C", "force-frame-pointers",
 

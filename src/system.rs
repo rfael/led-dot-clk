@@ -1,1 +1,2 @@
-mod time;
+pub mod display;
+pub mod time;

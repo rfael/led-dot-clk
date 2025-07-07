@@ -8,7 +8,13 @@ use esp_alloc as _;
 use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
 
-use crate::{bsp::Board, config::Config, ntp::NtpClient, wifi::WifiInterface};
+use crate::{
+    bsp::Board,
+    config::Config,
+    ntp::NtpClient,
+    system::{display::Display, time::WallClock},
+    wifi::WifiInterface,
+};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -71,26 +77,14 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
 
     let mut board = Board::init(peripherals).await?;
     let config = Config::get();
+    let display = Display::init(board.display()).await?;
+    display.set_intensity(0x01).await?;
 
-    {
-        let datetime = board
-            .rtc()
-            .lock()
-            .await
-            .datetime()
-            .await
-            .map_err(|_| error::Error::Other("Failed to get initial RTC time"))?
-            .and_utc();
-        let datetime = datetime.with_timezone(&config.timezone());
-        log::info!("Initial RTC time: {datetime}");
-        board
-            .display()
-            .lock()
-            .await
-            .write_time(datetime.time())
-            .await
-            .map_err(|_| error::Error::Other("Failed to display initial time"))?;
-    }
+    let mut wall_clock = WallClock::init(board.rtc(), config.timezone()).await;
+
+    let datetime = wall_clock.now_local().await;
+    log::info!("Initial date time: {datetime}");
+    display.write_time(datetime.time()).await?;
 
     let wifi_interfaces = board
         .take_wifi_interfaces()
@@ -115,24 +109,11 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
     let mut timeout = Duration::from_secs(0);
     loop {
         Timer::after(timeout).await;
-        let datetime = match board.rtc().lock().await.datetime().await {
-            Ok(dt) => dt.and_utc().with_timezone(&config.timezone()),
-            Err(err) => {
-                log::error!("Failed to fetch time from RTC: {err:?}");
-                timeout = RETRY_TIMEOUT;
-                continue;
-            }
-        };
 
+        let datetime = wall_clock.now_local().await;
         log::info!("Time to display: {datetime}");
 
-        match board
-            .display()
-            .lock()
-            .await
-            .write_time(datetime.time())
-            .await
-        {
+        match display.write_time(datetime.time()).await {
             Ok(()) => {
                 timeout = Duration::from_secs(60 - datetime.second() as u64);
             }

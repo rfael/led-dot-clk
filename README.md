@@ -1,6 +1,6 @@
 # led-dot-clk
 
-Shelf clock with LED dot matrix display and NTP time synchronization on ESP32-C2
+Shelf clock with LED dot matrix display and NTP time synchronization on ESP32-C2 written in Rust (and embassy)
 
 ## Build
 
