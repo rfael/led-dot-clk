@@ -1,7 +1,8 @@
-use ds3231::{Config as RtcConfig, DS3231Error, SquareWaveFrequency, TimeRepresentation, DS3231};
+use ds3231::{Config as RtcConfig, DS3231, DS3231Error, SquareWaveFrequency, TimeRepresentation};
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 use esp_hal::{
+    Async,
     gpio::{Output, OutputConfig},
     i2c::master::{Config as I2cConfig, ConfigError as I2cConfigError, Error as I2cError, I2c},
     peripherals::Peripherals,
@@ -12,11 +13,10 @@ use esp_hal::{
     },
     time::Rate,
     timer::{systimer::SystemTimer, timg::TimerGroup},
-    Async,
 };
 use esp_wifi::{
-    wifi::{Interfaces, WifiController},
     EspWifiController,
+    wifi::{Interfaces, WifiController},
 };
 use thiserror::Error;
 
@@ -24,7 +24,7 @@ use crate::{impl_from_variant, mk_static};
 
 mod max7219_led_matrix;
 
-pub use max7219_led_matrix::Max7219;
+pub use max7219_led_matrix::{Max7219, Max7219Error};
 
 #[derive(Debug, Error)]
 pub enum BoardError {
@@ -62,13 +62,11 @@ impl Board {
         esp_hal_embassy::init(systimer.alarm0);
 
         // WiFi
-        let esp_wifi_ctrl = esp_wifi::init(timg0.timer0, rng, peripherals.RADIO_CLK)
-            .map_err(|_| BoardError::WifiInitFail)?;
+        let esp_wifi_ctrl = esp_wifi::init(timg0.timer0, rng, peripherals.RADIO_CLK).map_err(|_| BoardError::WifiInitFail)?;
         let esp_wifi_ctrl = mk_static!(EspWifiController<'static>, esp_wifi_ctrl);
 
         let (wifi_controller, wifi_interfaces) =
-            esp_wifi::wifi::new(esp_wifi_ctrl, peripherals.WIFI)
-                .map_err(|_| BoardError::WifiInitFail)?;
+            esp_wifi::wifi::new(esp_wifi_ctrl, peripherals.WIFI).map_err(|_| BoardError::WifiInitFail)?;
 
         // MAX7219
         let sck = peripherals.GPIO0;
@@ -96,13 +94,10 @@ impl Board {
         // DS3231
         let sda = peripherals.GPIO10;
         let scl = peripherals.GPIO18;
-        let i2c = I2c::new(
-            peripherals.I2C0,
-            I2cConfig::default().with_frequency(Rate::from_khz(100)),
-        )?
-        .with_sda(sda)
-        .with_scl(scl)
-        .into_async();
+        let i2c = I2c::new(peripherals.I2C0, I2cConfig::default().with_frequency(Rate::from_khz(100)))?
+            .with_sda(sda)
+            .with_scl(scl)
+            .into_async();
         let mut rtc = DS3231::new(i2c, 0x68);
         let rtc_config = RtcConfig {
             time_representation: TimeRepresentation::TwentyFourHour,

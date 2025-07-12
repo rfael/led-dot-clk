@@ -14,7 +14,7 @@ impl WallClock {
     pub async fn init(rtc: &'static SharedDevice<RtcDevice>, timezone: FixedOffset) -> Self {
         let now = match rtc.lock().await.datetime().await {
             Ok(t) => {
-                log::debug!("Time read from RTC: {t}");
+                log::debug!("Time read from RTC: {t} UTC");
                 t
             }
             Err(err) => {
@@ -35,13 +35,12 @@ impl WallClock {
     pub async fn now_utc(&mut self) -> DateTime<Utc> {
         self.last_known_time = match self.rtc.lock().await.datetime().await {
             Ok(t) => {
-                log::debug!("Time read from RTC: {t}");
+                log::debug!("Time read from RTC: {t} UTC");
                 t.and_utc()
             }
             Err(err) => {
                 log::error!("Reading time from RTC failed: {err:?}");
-                self.last_known_time
-                    + TimeDelta::microseconds(self.last_time_check.as_micros() as _)
+                self.last_known_time + TimeDelta::microseconds(self.last_time_check.as_micros() as _)
             }
         };
 

@@ -4,10 +4,7 @@ use embassy_time::{Duration, Ticker, Timer};
 use esp_alloc as _;
 use esp_backtrace as _;
 use esp_hal::rng::Rng;
-use esp_wifi::wifi::{
-    ClientConfiguration, Configuration, Interfaces, WifiController, WifiDevice, WifiEvent,
-    WifiState,
-};
+use esp_wifi::wifi::{ClientConfiguration, Configuration, Interfaces, WifiController, WifiDevice, WifiEvent, WifiState};
 use thiserror::Error;
 
 use crate::{

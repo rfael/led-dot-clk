@@ -3,9 +3,9 @@ use core::net::{IpAddr, SocketAddr};
 use chrono::DateTime;
 use embassy_executor::{SpawnError, Spawner};
 use embassy_net::{
+    Stack,
     dns::DnsQueryType,
     udp::{PacketMetadata, UdpSocket},
-    Stack,
 };
 use embassy_time::{Duration, Ticker};
 use sntpc::{NtpContext, NtpTimestampGenerator};
@@ -48,11 +48,7 @@ pub struct NtpClient {
 }
 
 impl NtpClient {
-    pub fn new(
-        stack: Stack<'static>,
-        config: &'static NtpClientConfig,
-        rtc: &'static SharedDevice<RtcDevice>,
-    ) -> Self {
+    pub fn new(stack: Stack<'static>, config: &'static NtpClientConfig, rtc: &'static SharedDevice<RtcDevice>) -> Self {
         Self { stack, config, rtc }
     }
 
@@ -71,13 +67,7 @@ async fn ntp_task(client: NtpClient) {
     let mut tx_meta = [PacketMetadata::EMPTY; 16];
     let mut tx_buffer = [0; 4096];
 
-    let mut socket = UdpSocket::new(
-        client.stack,
-        &mut rx_meta,
-        &mut rx_buffer,
-        &mut tx_meta,
-        &mut tx_buffer,
-    );
+    let mut socket = UdpSocket::new(client.stack, &mut rx_meta, &mut rx_buffer, &mut tx_meta, &mut tx_buffer);
     socket.bind(123).unwrap();
 
     let context = NtpContext::new(Timestamp::default());
@@ -119,13 +109,7 @@ async fn ntp_task(client: NtpClient) {
         };
         log::info!("Time received from NTP server: {time}");
 
-        if let Err(err) = client
-            .rtc
-            .lock()
-            .await
-            .set_datetime(&time.naive_utc())
-            .await
-        {
+        if let Err(err) = client.rtc.lock().await.set_datetime(&time.naive_utc()).await {
             log::error!("Updating time in RTC failed: {err:?}");
             ticker = Ticker::every(RETRY_TIMEOUT);
             continue;

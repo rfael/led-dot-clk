@@ -35,6 +35,19 @@ enum DecodeMode {
     CodeBDigits7_0 = 0xFF,
 }
 
+#[derive(Debug)]
+pub enum Max7219Error<S> {
+    Spi(S),
+    InvalidInput,
+}
+pub type Max7219Result<T, S> = Result<T, Max7219Error<S>>;
+
+impl<S> From<S> for Max7219Error<S> {
+    fn from(err: S) -> Self {
+        Self::Spi(err)
+    }
+}
+
 /// A MAX7219 chip.
 pub struct Max7219<SPI> {
     spi: SPI,
@@ -52,43 +65,49 @@ where
         }
     }
 
-    // pub fn devices_num(&self) -> usize {
-    //     DISPLAYS_NUM
-    // }
+    /// Max display width in pixels
+    pub const fn max_width() -> usize {
+        DISPLAYS_NUM * 8
+    }
 
-    async fn write_register(&mut self, register: u8, data: u8) -> Result<(), SPI::Error> {
+    /// Max display height in pixels
+    pub const fn max_height() -> usize {
+        8
+    }
+
+    async fn write_register(&mut self, register: u8, data: u8) -> Max7219Result<(), SPI::Error> {
         let mut buffer = [0x00; 2 * DISPLAYS_NUM];
         buffer.chunks_exact_mut(2).for_each(|c| {
             c[0] = register;
             c[1] = data;
         });
 
-        self.spi.write(&buffer).await
+        self.spi.write(&buffer).await?;
+        Ok(())
     }
 
     /// Power on the display.
-    pub async fn power_on(&mut self) -> Result<(), SPI::Error> {
+    pub async fn power_on(&mut self) -> Max7219Result<(), SPI::Error> {
         self.write_register(Register::OnOff as _, 0x01).await
     }
 
     /// Power off the display.
-    pub async fn power_off(&mut self) -> Result<(), SPI::Error> {
+    pub async fn power_off(&mut self) -> Max7219Result<(), SPI::Error> {
         self.write_register(Register::OnOff as _, 0x00).await
     }
 
     /// Set intensity level on the display,from `0x00` (dimmest) to `0x0F` (brightest).
-    pub async fn set_intensity(&mut self, intensity: u8) -> Result<(), SPI::Error> {
-        self.write_register(Register::Intensity as _, intensity & 0x0F)
-            .await
+    pub async fn set_intensity(&mut self, intensity: u8) -> Max7219Result<(), SPI::Error> {
+        self.write_register(Register::Intensity as _, intensity & 0x0F).await
     }
 
     /// Enable or disable the display test mode.
-    pub async fn set_test(&mut self, enable: bool) -> Result<(), SPI::Error> {
+    pub async fn set_test(&mut self, enable: bool) -> Max7219Result<(), SPI::Error> {
         self.write_register(Register::DisplayTest as _, if enable { 0x01 } else { 0x00 })
             .await
     }
 
-    pub async fn init(&mut self) -> Result<(), SPI::Error> {
+    pub async fn init(&mut self) -> Max7219Result<(), SPI::Error> {
         self.power_off().await?;
         self.write_register(Register::ScanLimit as _, 7).await?;
         self.write_register(Register::DecodeMode as _, DecodeMode::NoDecode as _)
@@ -99,62 +118,88 @@ where
         self.power_on().await
     }
 
-    async fn write_display_buffer(&mut self) -> Result<(), SPI::Error> {
+    async fn write_display_buffer(&mut self) -> Max7219Result<(), SPI::Error> {
         let mut buffer = [0u8; 2 * DISPLAYS_NUM];
-        for register in 0..8 {
-            buffer
-                .chunks_exact_mut(2)
-                .rev()
-                .enumerate()
-                .for_each(|(i, c)| {
-                    c[0] = register + 1;
-                    let index = register as usize + i * 8;
-                    c[1] = self.display_buffer[index];
-                });
+
+        for r in 0..8 {
+            buffer.chunks_exact_mut(2).rev().enumerate().for_each(|(i, c)| {
+                c[0] = r + 1;
+                // let index = r as usize + i * 8;
+                // c[1] = self.display_buffer[index];
+
+                let index = i * 8;
+                c[1] = self.display_buffer[index..]
+                    .iter()
+                    .take(8)
+                    .enumerate()
+                    .fold(0x00, |a, (bi, b)| a | (((b >> r) & 0x01) << bi))
+            });
             self.spi.write(&buffer).await?;
         }
         Ok(())
     }
 
     /// Clear the display by setting all digits to empty.
-    pub async fn clear(&mut self) -> Result<(), SPI::Error> {
-        self.display_buffer.iter_mut().for_each(|b| *b = 0);
+    pub async fn clear(&mut self) -> Max7219Result<(), SPI::Error> {
+        self.display_buffer.fill(0x00);
         self.write_display_buffer().await
     }
 
-    pub async fn set_pixel(&mut self, x: usize, y: usize, set: bool) -> Result<(), SPI::Error> {
-        if x >= 8 * DISPLAYS_NUM || y >= 8 {
-            return Ok(());
+    pub async fn set_pixel(&mut self, x: usize, y: usize, set: bool) -> Max7219Result<(), SPI::Error> {
+        if x >= Self::max_width() || y >= Self::max_height() {
+            return Err(Max7219Error::InvalidInput);
         }
 
-        let byte_index = x % 8;
-        let display_index = x / 8;
-        let i = y + display_index * 8;
+        let b = self.display_buffer.get_mut(x).ok_or(Max7219Error::InvalidInput)?;
+        let mask = 1 << y;
         if set {
-            self.display_buffer[i] |= 1 << byte_index;
+            *b |= mask;
         } else {
-            self.display_buffer[i] &= !(1 << byte_index);
+            *b &= !mask;
         }
 
         self.write_display_buffer().await
     }
 
-    pub async fn write_str(&mut self, text: &str) -> Result<(), SPI::Error> {
-        text.chars()
-            .filter(|c| c.is_ascii())
-            .take(DISPLAYS_NUM)
-            .enumerate()
-            .for_each(|(i, c)| {
-                CP437FONT[c as usize].iter().enumerate().for_each(|(l, v)| {
-                    self.display_buffer[l + i * 8] = *v;
-                });
-            });
+    pub async fn write_str(&mut self, x: i32, text: &str) -> Max7219Result<(), SPI::Error> {
+        let display_buffer_offset = x.max(0) as usize;
+        let chars_to_skip = (-x.min(0)) / 8;
+        let char_bytes_to_skip = (-x.min(0)) % 8;
 
-        self.write_display_buffer().await
+        text.chars()
+            .filter_map(Self::get_char)
+            .skip(chars_to_skip as usize)
+            .flat_map(|c| c.into_iter())
+            .skip(char_bytes_to_skip as usize)
+            .zip(self.display_buffer.iter_mut().skip(display_buffer_offset))
+            .for_each(|(c, b)| *b = c);
+
+        self.write_display_buffer().await?;
+
+        Ok(())
+    }
+
+    fn get_char(c: char) -> Option<[u8; 8]> {
+        let c = c.is_ascii().then(|| CP437FONT.get(c as usize))??;
+
+        // rotation
+        let mut result = [0x00; 8];
+        result.iter_mut().enumerate().for_each(|(i, r)| {
+            *r = ((c[0] >> i) & 0x01)
+                | ((c[1] >> i) & 0x01) << 1
+                | ((c[2] >> i) & 0x01) << 2
+                | ((c[3] >> i) & 0x01) << 3
+                | ((c[4] >> i) & 0x01) << 4
+                | ((c[5] >> i) & 0x01) << 5
+                | ((c[6] >> i) & 0x01) << 6
+                | ((c[7] >> i) & 0x01) << 7;
+        });
+
+        Some(result)
     }
 }
 
-const CP437FONT: [[u8; 8]; 256] = [
+static CP437FONT: [[u8; 8]; 256] = [
     [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], // 0x00
     [0x7E, 0x81, 0x99, 0xBD, 0x81, 0xA5, 0x81, 0x7E], // 0x01
     [0x7E, 0xFF, 0xE7, 0xC3, 0xFF, 0xDB, 0xFF, 0x7E], // 0x02

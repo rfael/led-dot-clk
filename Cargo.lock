@@ -62,15 +62,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b8e56985ec62d17e9c1001dc89c88ecd7dc08e47eba5ec7c29c7b5eeecde967"
 
 [[package]]
-name = "block-buffer"
-version = "0.10.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
-dependencies = [
- "generic-array",
-]
-
-[[package]]
 name = "bytemuck"
 version = "1.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -165,7 +156,6 @@ version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292"
 dependencies = [
- "block-buffer",
  "crypto-common",
 ]
 
@@ -449,7 +439,6 @@ version = "0.16.0"
 dependencies = [
  "cfg-if",
  "esp-config",
- "esp-metadata",
  "esp-println",
  "heapless",
 ]
@@ -462,10 +451,8 @@ dependencies = [
  "document-features",
  "embedded-storage",
  "esp-config",
- "esp-metadata",
  "esp-rom-sys",
  "jiff",
- "md-5",
  "strum",
 ]
 
@@ -474,7 +461,7 @@ name = "esp-config"
 version = "0.4.0"
 dependencies = [
  "document-features",
- "esp-metadata",
+ "esp-metadata-generated",
  "evalexpr",
  "serde",
  "serde_yaml",
@@ -503,7 +490,7 @@ dependencies = [
  "enumset",
  "esp-config",
  "esp-hal-procmacros",
- "esp-metadata",
+ "esp-metadata-generated",
  "esp-riscv-rt",
  "esp-rom-sys",
  "esp32c2",
@@ -538,7 +525,7 @@ dependencies = [
  "esp-config",
  "esp-hal",
  "esp-hal-procmacros",
- "esp-metadata",
+ "esp-metadata-generated",
  "portable-atomic",
  "static_cell",
 ]
@@ -569,12 +556,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "esp-metadata-generated"
+version = "0.0.1"
+dependencies = [
+ "esp-metadata",
+]
+
+[[package]]
 name = "esp-println"
 version = "0.14.0"
 dependencies = [
  "critical-section",
  "document-features",
- "esp-metadata",
+ "esp-metadata-generated",
  "log",
  "portable-atomic",
 ]
@@ -593,7 +587,7 @@ name = "esp-rom-sys"
 version = "0.1.0"
 dependencies = [
  "document-features",
- "esp-metadata",
+ "esp-metadata-generated",
 ]
 
 [[package]]
@@ -611,7 +605,7 @@ dependencies = [
  "esp-alloc",
  "esp-config",
  "esp-hal",
- "esp-metadata",
+ "esp-metadata-generated",
  "esp-wifi-sys",
  "num-derive",
  "num-traits",
@@ -893,16 +887,6 @@ dependencies = [
  "pulldown-cmark",
  "quote",
  "syn 1.0.109",
-]
-
-[[package]]
-name = "md-5"
-version = "0.10.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
-dependencies = [
- "cfg-if",
- "digest",
 ]
 
 [[package]]
