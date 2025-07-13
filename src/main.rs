@@ -6,7 +6,7 @@ use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
 use esp_alloc as _;
 use esp_backtrace as _;
-use esp_hal::clock::CpuClock;
+use esp_hal::{clock::CpuClock, rom::software_reset, system::reset_reason};
 
 use crate::{
     bsp::Board,
@@ -28,15 +28,16 @@ mod wifi;
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) -> ! {
-    fallible_main(spawner)
-        .await
-        .inspect_err(|err| log::error!("Main failed: {err}"))
-        .unwrap();
-
-    loop {
-        Timer::after(Duration::from_millis(1_000)).await;
-        log::debug!("tick...");
+    if let Some(reason) = reset_reason() {
+        log::info!("Last reset reason: {reason:?}")
     }
+
+    if let Err(err) = fallible_main(spawner).await {
+        log::error!("Main failed: {err}")
+    }
+
+    Timer::after(Duration::from_secs(1)).await;
+    software_reset()
 }
 
 async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {

@@ -8,7 +8,7 @@ use esp_hal::{
     peripherals::Peripherals,
     rng::Rng,
     spi::{
-        self,
+        Mode as SpiMode,
         master::{Config as SpiConfig, ConfigError as SpiConfigError, Spi},
     },
     time::Rate,
@@ -62,7 +62,7 @@ impl Board {
         esp_hal_embassy::init(systimer.alarm0);
 
         // WiFi
-        let esp_wifi_ctrl = esp_wifi::init(timg0.timer0, rng, peripherals.RADIO_CLK).map_err(|_| BoardError::WifiInitFail)?;
+        let esp_wifi_ctrl = esp_wifi::init(timg0.timer0, rng).map_err(|_| BoardError::WifiInitFail)?;
         let esp_wifi_ctrl = mk_static!(EspWifiController<'static>, esp_wifi_ctrl);
 
         let (wifi_controller, wifi_interfaces) =
@@ -78,7 +78,7 @@ impl Board {
             peripherals.SPI2,
             SpiConfig::default()
                 .with_frequency(Rate::from_khz(100))
-                .with_mode(spi::Mode::_0),
+                .with_mode(SpiMode::_0),
         )?
         .with_sck(sck)
         .with_miso(miso)
