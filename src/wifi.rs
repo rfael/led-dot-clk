@@ -4,7 +4,9 @@ use embassy_time::{Duration, Ticker, Timer};
 use esp_alloc as _;
 use esp_backtrace as _;
 use esp_hal::rng::Rng;
-use esp_wifi::wifi::{ClientConfiguration, Configuration, Interfaces, WifiController, WifiDevice, WifiEvent, WifiState};
+use esp_radio::wifi::{
+    ClientConfig, Config as WifiConfig, Interfaces, ScanConfig, WifiController, WifiDevice, WifiEvent, WifiStaState,
+};
 use thiserror::Error;
 
 use crate::{
@@ -29,7 +31,7 @@ pub struct WifiInterface {
 impl WifiInterface {
     pub async fn init(
         spawner: &Spawner,
-        mut rng: Rng,
+        rng: Rng,
         interfaces: Interfaces<'static>,
         controller: WifiController<'static>,
         config: &'static Config,
@@ -91,27 +93,39 @@ async fn connection(mut controller: WifiController<'static>, config: &'static Wi
     log::debug!("start connection task");
     log::debug!("Device capabilities: {:?}", controller.capabilities());
     loop {
-        if esp_wifi::wifi::wifi_state() == WifiState::StaConnected {
+        if esp_radio::wifi::sta_state() == WifiStaState::Connected {
             // wait until we're no longer connected
             controller.wait_for_event(WifiEvent::StaDisconnected).await;
             Timer::after(config.reconnect_timeout()).await
         }
 
         if !matches!(controller.is_started(), Ok(true)) {
-            let client_config = Configuration::Client(ClientConfiguration {
-                ssid: config.ssid().into(),
-                password: config.password().into(),
-                ..Default::default()
-            });
-            controller.set_configuration(&client_config).unwrap();
+            let client_conifg = ClientConfig::default()
+                .with_ssid(config.ssid().into())
+                .with_password(config.password().into());
+            let client_config = WifiConfig::Client(client_conifg);
+            if let Err(err) = controller.set_config(&client_config) {
+                log::error!("Settin WiFi conifg failed: {err}");
+                continue;
+            }
+
             log::info!("Starting wifi");
-            controller.start_async().await.unwrap();
-            log::info!("Wifi started!");
+            match controller.start_async().await {
+                Ok(_) => log::info!("Wifi started!"),
+                Err(err) => {
+                    log::error!("Starting WiFi controller failed: {err}");
+                    continue;
+                }
+            }
 
             log::debug!("Scan");
-            let result = controller.scan_n_async(10).await.unwrap();
-            for ap in result {
-                log::debug!("{ap:?}");
+            let scan_config = ScanConfig::default().with_max(10);
+            match controller.scan_with_config_async(scan_config).await {
+                Ok(r) => r.iter().for_each(|ap| log::debug!("Found AP: {ap:?}")),
+                Err(err) => {
+                    log::error!("WiFi AP scan failed: {err}");
+                    continue;
+                }
             }
         }
         log::info!("About to connect...");

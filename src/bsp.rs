@@ -5,6 +5,7 @@ use esp_hal::{
     Async,
     gpio::{Output, OutputConfig},
     i2c::master::{Config as I2cConfig, ConfigError as I2cConfigError, Error as I2cError, I2c},
+    interrupt::software::SoftwareInterruptControl,
     peripherals::Peripherals,
     rng::Rng,
     spi::{
@@ -12,10 +13,10 @@ use esp_hal::{
         master::{Config as SpiConfig, ConfigError as SpiConfigError, Spi},
     },
     time::Rate,
-    timer::{systimer::SystemTimer, timg::TimerGroup},
+    timer::timg::TimerGroup,
 };
-use esp_wifi::{
-    EspWifiController,
+use esp_radio::{
+    Controller as RadioController,
     wifi::{Interfaces, WifiController},
 };
 use thiserror::Error;
@@ -47,6 +48,7 @@ pub type RtcDevice = DS3231<I2c<'static, Async>>;
 
 pub struct Board {
     rng: Rng,
+    _radio_controller: &'static RadioController<'static>,
     wifi_controller: Option<WifiController<'static>>,
     wifi_interfaces: Option<Interfaces<'static>>,
     display: &'static SharedDevice<Max7219<SpiDev>>,
@@ -56,17 +58,17 @@ pub struct Board {
 impl Board {
     pub async fn init(peripherals: Peripherals) -> BoardResult<Self> {
         let timg0 = TimerGroup::new(peripherals.TIMG0);
-        let rng = Rng::new(peripherals.RNG);
+        let rng = Rng::new();
 
-        let systimer = SystemTimer::new(peripherals.SYSTIMER);
-        esp_hal_embassy::init(systimer.alarm0);
+        let sw_int = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
+        esp_rtos::start(timg0.timer0, sw_int.software_interrupt0);
 
         // WiFi
-        let esp_wifi_ctrl = esp_wifi::init(timg0.timer0, rng).map_err(|_| BoardError::WifiInitFail)?;
-        let esp_wifi_ctrl = mk_static!(EspWifiController<'static>, esp_wifi_ctrl);
+        let radio_ctrl = esp_radio::init().map_err(|_| BoardError::WifiInitFail)?;
+        let radio_ctrl = mk_static!(RadioController<'static>, radio_ctrl);
 
         let (wifi_controller, wifi_interfaces) =
-            esp_wifi::wifi::new(esp_wifi_ctrl, peripherals.WIFI).map_err(|_| BoardError::WifiInitFail)?;
+            esp_radio::wifi::new(radio_ctrl, peripherals.WIFI, Default::default()).map_err(|_| BoardError::WifiInitFail)?;
 
         // MAX7219
         let sck = peripherals.GPIO0;
@@ -111,6 +113,7 @@ impl Board {
 
         let me = Self {
             rng,
+            _radio_controller: radio_ctrl,
             wifi_controller: Some(wifi_controller),
             wifi_interfaces: Some(wifi_interfaces),
             display,

@@ -10,7 +10,6 @@ log = { version = "0.4.22" }
 esp-alloc = { path = "./esp-hal/esp-alloc" }
 esp-backtrace = { path = "./esp-hal/esp-backtrace", features = [
     "esp32c2",
-    "exception-handler",
     "panic-handler",
     "println",
 ] }
@@ -23,34 +22,36 @@ esp-println = { path = "./esp-hal/esp-println", features = [
     "esp32c2",
     "log-04",
 ] }
-esp-wifi = { path = "./esp-hal/esp-wifi", features = [
+esp-radio = { path = "./esp-hal/esp-radio", features = [
     "esp32c2",
     "esp-alloc",
     "wifi",
+    "unstable",
 ] }
 esp-bootloader-esp-idf = { path = "./esp-hal/esp-bootloader-esp-idf", features = [
     "esp32c2",
 ] }
-esp-hal-embassy = { path = "./esp-hal/esp-hal-embassy", features = ["esp32c2"] }
-embassy-executor = { version = "0.7.0", features = ["task-arena-size-20480"] }
+esp-rtos = { path = "./esp-hal/esp-rtos", features = ["esp32c2", "embassy"] }
+embassy-executor = { version = "0.9.1" }
 embassy-futures = "0.1.1"
-embassy-net = { version = "0.6.0", features = [
+embassy-net = { version = "0.7.1", features = [
     "tcp",
     "udp",
     "dns",
     "dhcpv4",
     "medium-ethernet",
+    "proto-ipv6",
 ] }
-embassy-sync = "0.6.2"
-embassy-time = "0.4.0"
-embassy-embedded-hal = "0.3.0"
-embedded-io = "0.6.1"
-embedded-io-async = "0.6.1"
+embassy-sync = "0.7.2"
+embassy-time = "0.5.0"
+embassy-embedded-hal = "0.5.0"
+embedded-io = "0.7.1"
+embedded-io-async = "0.7.0"
 embedded-hal-async = "1.0"
-heapless = { version = "0.8.0", default-features = false }
+heapless = { version = "0.9.1", default-features = false }
 static_cell = { version = "2.1.0", features = ["nightly"] }
-sntpc = { version = "0.5.2", default-features = false, features = [
-    "embassy-socket",
+sntpc = { version = "0.6.1", default-features = false, features = [
+    "embassy-socket", "embassy-socket-ipv6"
 ] }
 chrono = { version = "0.4.41", default-features = false }
 embedded-hal-bus = "0.3.0"

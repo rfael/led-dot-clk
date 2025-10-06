@@ -26,12 +26,8 @@ mod system;
 mod utils;
 mod wifi;
 
-#[esp_hal_embassy::main]
+#[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
-    if let Some(reason) = reset_reason() {
-        log::info!("Last reset reason: {reason:?}")
-    }
-
     if let Err(err) = fallible_main(spawner).await {
         log::error!("Main failed: {err}")
     }
@@ -42,6 +38,10 @@ async fn main(spawner: Spawner) -> ! {
 
 async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
     esp_println::logger::init_logger_from_env();
+    if let Some(reason) = reset_reason() {
+        log::info!("Last reset reason: {reason:?}")
+    }
+
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
 
