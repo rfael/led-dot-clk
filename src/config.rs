@@ -11,10 +11,12 @@ pub struct Config {
 
 impl Config {
     pub fn get() -> &'static Self {
+        #[allow(clippy::unwrap_used, reason = "This value is safe")]
+        let timezone = FixedOffset::east_opt(2 * 3600).unwrap();
         let me = Self {
             wifi: Default::default(),
             ntp_client: Default::default(),
-            timezone: FixedOffset::east_opt(2 * 3600).unwrap(),
+            timezone,
         };
         mk_static!(Config, me)
     }

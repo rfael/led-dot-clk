@@ -67,52 +67,62 @@ async fn ntp_task(client: NtpClient) {
     let mut tx_meta = [PacketMetadata::EMPTY; 16];
     let mut tx_buffer = [0; 4096];
 
-    let mut socket = UdpSocket::new(client.stack, &mut rx_meta, &mut rx_buffer, &mut tx_meta, &mut tx_buffer);
-    socket.bind(123).unwrap();
-
-    let context = NtpContext::new(Timestamp::default());
-
-    let ntp_addrs = client
-        .stack
-        .dns_query(client.config.server(), DnsQueryType::A)
-        .await
-        .expect("Failed to resolve DNS");
-    if ntp_addrs.is_empty() {
-        panic!("Failed to resolve DNS");
-    }
-
     let mut ticker = Ticker::every(RETRY_TIMEOUT);
     loop {
         ticker.next().await;
+        let mut socket = UdpSocket::new(client.stack, &mut rx_meta, &mut rx_buffer, &mut tx_meta, &mut tx_buffer);
+        if let Err(err) = socket.bind(123) {
+            log::error!("Can not bind socket to 123 port: {err:?}");
+            ticker.next().await;
+            continue;
+        }
 
-        let addr: IpAddr = ntp_addrs[0].into();
-        let addr = SocketAddr::from((addr, 123));
+        let context = NtpContext::new(Timestamp::default());
 
-        log::info!("NTP server query...");
-        let result = sntpc::get_time(addr, &socket, context).await;
-        let time = match result {
-            Ok(time) => {
-                ticker = Ticker::every(client.config.query_period());
-                time
+        let ntp_addrs = match client.stack.dns_query(client.config.server(), DnsQueryType::A).await {
+            Ok(addr) if addr.is_empty() => {
+                log::error!("Resolved DNS address is empty");
+                continue;
             }
+            Ok(addr) => addr,
             Err(err) => {
-                log::error!("Error getting time: {err:?}");
-                ticker = Ticker::every(RETRY_TIMEOUT);
+                log::error!("Failed to resolve DNS: {err:?}");
                 continue;
             }
         };
 
-        let Some(time) = DateTime::from_timestamp(time.seconds as _, 0) else {
-            log::error!("Failed to convert NTP response to DateTime");
-            ticker = Ticker::every(RETRY_TIMEOUT);
-            continue;
-        };
-        log::info!("Time received from NTP server: {time}");
+        loop {
+            ticker.next().await;
 
-        if let Err(err) = client.rtc.lock().await.set_datetime(&time.naive_utc()).await {
-            log::error!("Updating time in RTC failed: {err:?}");
-            ticker = Ticker::every(RETRY_TIMEOUT);
-            continue;
+            let addr: IpAddr = ntp_addrs[0].into();
+            let addr = SocketAddr::from((addr, 123));
+
+            log::info!("NTP server query...");
+            let result = sntpc::get_time(addr, &socket, context).await;
+            let time = match result {
+                Ok(time) => {
+                    ticker = Ticker::every(client.config.query_period());
+                    time
+                }
+                Err(err) => {
+                    log::error!("Error getting time: {err:?}");
+                    ticker = Ticker::every(RETRY_TIMEOUT);
+                    continue;
+                }
+            };
+
+            let Some(time) = DateTime::from_timestamp(time.seconds as _, 0) else {
+                log::error!("Failed to convert NTP response to DateTime");
+                ticker = Ticker::every(RETRY_TIMEOUT);
+                continue;
+            };
+            log::info!("Time received from NTP server: {time}");
+
+            if let Err(err) = client.rtc.lock().await.set_datetime(&time.naive_utc()).await {
+                log::error!("Updating time in RTC failed: {err:?}");
+                ticker = Ticker::every(RETRY_TIMEOUT);
+                continue;
+            }
         }
     }
 }

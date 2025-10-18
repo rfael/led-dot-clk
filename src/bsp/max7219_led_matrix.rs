@@ -40,13 +40,14 @@ pub enum Max7219Error<S> {
     Spi(S),
     InvalidInput,
 }
-pub type Max7219Result<T, S> = Result<T, Max7219Error<S>>;
 
 impl<S> From<S> for Max7219Error<S> {
     fn from(err: S) -> Self {
         Self::Spi(err)
     }
 }
+
+pub type Max7219Result<T, S> = Result<T, Max7219Error<S>>;
 
 /// A MAX7219 chip.
 pub struct Max7219<SPI> {

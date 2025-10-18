@@ -33,7 +33,6 @@ esp-bootloader-esp-idf = { path = "./esp-hal/esp-bootloader-esp-idf", features =
 ] }
 esp-rtos = { path = "./esp-hal/esp-rtos", features = ["esp32c2", "embassy"] }
 embassy-executor = { version = "0.9.1" }
-embassy-futures = "0.1.1"
 embassy-net = { version = "0.7.1", features = [
     "tcp",
     "udp",
@@ -45,16 +44,14 @@ embassy-net = { version = "0.7.1", features = [
 embassy-sync = "0.7.2"
 embassy-time = "0.5.0"
 embassy-embedded-hal = "0.5.0"
-embedded-io = "0.7.1"
-embedded-io-async = "0.7.0"
 embedded-hal-async = "1.0"
 heapless = { version = "0.9.1", default-features = false }
 static_cell = { version = "2.1.0", features = ["nightly"] }
 sntpc = { version = "0.6.1", default-features = false, features = [
-    "embassy-socket", "embassy-socket-ipv6"
+    "embassy-socket",
+    "embassy-socket-ipv6",
 ] }
 chrono = { version = "0.4.41", default-features = false }
-embedded-hal-bus = "0.3.0"
 thiserror = { version = "2.0.12", default-features = false }
 ds3231 = { version = "0.3.0", features = ["async", "temperature_f32"] }
 
@@ -72,3 +69,11 @@ incremental = false
 lto = 'fat'
 opt-level = 's'
 overflow-checks = false
+
+[lints.clippy]
+get_unwrap = "deny"
+expect_used = "deny"
+unwrap_used = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
