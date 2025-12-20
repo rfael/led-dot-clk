@@ -56,7 +56,10 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
     let mut wall_clock = WallClock::init(board.rtc(), config.timezone()).await;
 
     let adc_pin1 = board.take_adc_pin().ok_or(error::Error::other("Can not take ADC PIN1"))?;
-    let motion_sensor = MotionSensor::new(board.adc(), adc_pin1);
+    let s_enbl_pin = board
+        .take_sensor_enable_pin()
+        .ok_or(error::Error::other("Can not take sensor enable pin"))?;
+    let motion_sensor = MotionSensor::new(board.adc(), adc_pin1, s_enbl_pin);
     let mut sensor_rx = motion_sensor
         .watch_receiver()
         .ok_or(error::Error::other("Can not get Motion Sensor receiver endpoint"))?;
@@ -75,13 +78,11 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
     let ntp_client = NtpClient::new(wifi.stack(), config.ntp_client(), board.rtc());
     ntp_client.launch(&spawner)?;
 
-    const RETRY_TIMEOUT: Duration = Duration::from_secs(10);
+    let day_start = NaiveTime::from_hms_opt(6, 30, 0).ok_or(error::Error::other("Invalid night start time"))?;
+    let day_end = NaiveTime::from_hms_opt(17, 0, 0).ok_or(error::Error::other("Invalid night end time"))?;
+    let day_time = day_start..day_end;
 
-    let night_start = NaiveTime::from_hms_opt(22, 0, 0).ok_or(error::Error::other("Invalid night start time"))?;
-    let night_end = NaiveTime::from_hms_opt(6, 30, 0).ok_or(error::Error::other("Invalid night end time"))?;
-    let nigth_time = night_start..night_end;
-
-    let mut timeout = Duration::from_secs(0);
+    let mut timeout = Duration::from_secs(1);
     loop {
         let presence_detected = match select(Timer::after(timeout), sensor_rx.changed()).await {
             Either::First(_) => false,
@@ -92,19 +93,26 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
         };
 
         let datetime = wall_clock.now_local().await;
-        if !presence_detected && nigth_time.contains(&datetime.time()) {
+
+        if !(presence_detected || day_time.contains(&datetime.time())) {
+            if let Err(err) = display.clear().await {
+                log::error!("Failed to clear display: {err}");
+            }
             continue;
         }
 
         log::debug!("Time to display: {datetime}");
 
         match display.write_time(datetime.time()).await {
+            Ok(()) if presence_detected => {
+                timeout = Duration::from_secs(15);
+            }
             Ok(()) => {
                 timeout = Duration::from_secs(60 - datetime.second() as u64);
             }
             Err(err) => {
                 log::error!("Failed to display time: {err}");
-                timeout = RETRY_TIMEOUT;
+                timeout = Duration::from_secs(10);
             }
         }
     }

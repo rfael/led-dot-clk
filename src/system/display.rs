@@ -47,6 +47,7 @@ impl Display {
 
     #[allow(unused)]
     pub async fn clear(&self) -> DisplayResult<()> {
+        log::debug!("Clearing display");
         self.max7219.lock().await.clear().await?;
         Ok(())
     }

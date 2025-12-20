@@ -4,7 +4,7 @@ use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 use esp_hal::{
     Async,
     analog::adc::{self, Adc, AdcConfig, AdcPin},
-    gpio::{Output, OutputConfig},
+    gpio::{Level, Output, OutputConfig},
     i2c::master::{Config as I2cConfig, ConfigError as I2cConfigError, Error as I2cError, I2c},
     interrupt::software::SoftwareInterruptControl,
     peripherals::{ADC1, GPIO1, Peripherals},
@@ -53,6 +53,7 @@ pub struct Board {
     rtc: &'static SharedDevice<RtcDevice>,
     adc: &'static SharedDevice<AdcDev>,
     adc_pin: Option<AdcPin1>,
+    sensor_enable_pin: Option<Output<'static>>,
 }
 
 impl Board {
@@ -69,13 +70,15 @@ impl Board {
         let adc = Adc::new(peripherals.ADC1, adc_config).into_async();
         let adc = mk_static!(SharedDevice<AdcDev>, Mutex::new(adc));
 
+        // Sensor LED
+        let sensor_enable_pin = Output::new(peripherals.GPIO2, Level::Low, Default::default());
+
         // WiFi
         let (wifi_controller, wifi_interfaces) =
             esp_radio::wifi::new(peripherals.WIFI, Default::default()).map_err(|_| BoardError::WifiInitFail)?;
 
         // MAX7219
         let sck = peripherals.GPIO0;
-        let miso = peripherals.GPIO2;
         let mosi = peripherals.GPIO4;
         let cs = peripherals.GPIO5;
 
@@ -86,7 +89,6 @@ impl Board {
                 .with_mode(SpiMode::_0),
         )?
         .with_sck(sck)
-        .with_miso(miso)
         .with_mosi(mosi)
         .into_async();
         let spi_bus = mk_static!(SharedDevice<Spi<'static, Async>>, Mutex::new(spi));
@@ -122,6 +124,7 @@ impl Board {
             rtc,
             adc,
             adc_pin: Some(adc_pin),
+            sensor_enable_pin: Some(sensor_enable_pin),
         };
 
         Ok(me)
@@ -153,5 +156,9 @@ impl Board {
 
     pub const fn take_adc_pin(&mut self) -> Option<AdcPin1> {
         self.adc_pin.take()
+    }
+
+    pub fn take_sensor_enable_pin(&mut self) -> Option<Output<'static>> {
+        self.sensor_enable_pin.take()
     }
 }

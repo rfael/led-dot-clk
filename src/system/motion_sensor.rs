@@ -5,6 +5,7 @@ use embassy_sync::{
     watch::{Receiver, Watch},
 };
 use embassy_time::{Duration, Ticker, Timer};
+use esp_hal::gpio::Output;
 use thiserror::Error;
 
 use crate::{
@@ -22,13 +23,19 @@ pub type MotionSensorResult<T> = Result<T, MotionSensorError>;
 pub struct MotionSensor {
     adc: &'static SharedDevice<AdcDev>,
     adc_pin: AdcPin1,
+    sensor_enable_pin: Output<'static>,
     watch: &'static Watch<CriticalSectionRawMutex, (), 1>,
 }
 
 impl MotionSensor {
-    pub fn new(adc: &'static SharedDevice<AdcDev>, adc_pin: AdcPin1) -> Self {
+    pub fn new(adc: &'static SharedDevice<AdcDev>, adc_pin: AdcPin1, sensor_enable_pin: Output<'static>) -> Self {
         let watch = mk_static!(Watch<CriticalSectionRawMutex, (), 1>, Watch::new());
-        Self { adc, adc_pin, watch }
+        Self {
+            adc,
+            adc_pin,
+            sensor_enable_pin,
+            watch,
+        }
     }
 
     pub fn launch(self, spawner: &Spawner) -> MotionSensorResult<()> {
@@ -41,7 +48,9 @@ impl MotionSensor {
         let mut samples: CircularBuffer<64, u16> = CircularBuffer::new();
         loop {
             ticker.next().await;
+            self.sensor_enable_pin.set_high();
             let sample = self.adc.lock().await.read_oneshot(&mut self.adc_pin).await;
+            self.sensor_enable_pin.set_low();
             // log::debug!("ADC1 = {sample}");
 
             samples.push_back(sample);

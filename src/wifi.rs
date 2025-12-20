@@ -37,9 +37,7 @@ impl WifiInterface {
         config: &'static Config,
     ) -> WifiResult<Self> {
         let wifi_interface = interfaces.station;
-
         let net_config = embassy_net::Config::dhcpv4(Default::default());
-
         let seed = (rng.random() as u64) << 32 | rng.random() as u64;
 
         let (stack, runner) = embassy_net::new(
