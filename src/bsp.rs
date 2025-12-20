@@ -3,10 +3,11 @@ use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 use esp_hal::{
     Async,
+    analog::adc::{self, Adc, AdcConfig, AdcPin},
     gpio::{Output, OutputConfig},
     i2c::master::{Config as I2cConfig, ConfigError as I2cConfigError, Error as I2cError, I2c},
     interrupt::software::SoftwareInterruptControl,
-    peripherals::Peripherals,
+    peripherals::{ADC1, GPIO1, Peripherals},
     rng::Rng,
     spi::{
         Mode as SpiMode,
@@ -15,10 +16,7 @@ use esp_hal::{
     time::Rate,
     timer::timg::TimerGroup,
 };
-use esp_radio::{
-    Controller as RadioController,
-    wifi::{Interfaces, WifiController},
-};
+use esp_radio::wifi::{Interfaces, WifiController};
 use thiserror::Error;
 
 use crate::{impl_from_variant, mk_static};
@@ -43,16 +41,18 @@ impl_from_variant!(BoardError, RtcError, DS3231Error<I2cError>);
 pub type BoardResult<T> = Result<T, BoardError>;
 pub type SharedDevice<P> = Mutex<CriticalSectionRawMutex, P>;
 pub type SpiDev = SpiDevice<'static, CriticalSectionRawMutex, Spi<'static, Async>, Output<'static>>;
-
+pub type AdcDev = Adc<'static, ADC1<'static>, Async>;
+pub type AdcPin1 = AdcPin<GPIO1<'static>, ADC1<'static>, ()>;
 pub type RtcDevice = DS3231<I2c<'static, Async>>;
 
 pub struct Board {
     rng: Rng,
-    _radio_controller: &'static RadioController<'static>,
     wifi_controller: Option<WifiController<'static>>,
     wifi_interfaces: Option<Interfaces<'static>>,
     display: &'static SharedDevice<Max7219<SpiDev>>,
     rtc: &'static SharedDevice<RtcDevice>,
+    adc: &'static SharedDevice<AdcDev>,
+    adc_pin: Option<AdcPin1>,
 }
 
 impl Board {
@@ -63,12 +63,15 @@ impl Board {
         let sw_int = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
         esp_rtos::start(timg0.timer0, sw_int.software_interrupt0);
 
-        // WiFi
-        let radio_ctrl = esp_radio::init().map_err(|_| BoardError::WifiInitFail)?;
-        let radio_ctrl = mk_static!(RadioController<'static>, radio_ctrl);
+        // ADC
+        let mut adc_config = AdcConfig::default();
+        let adc_pin = adc_config.enable_pin(peripherals.GPIO1, adc::Attenuation::_11dB);
+        let adc = Adc::new(peripherals.ADC1, adc_config).into_async();
+        let adc = mk_static!(SharedDevice<AdcDev>, Mutex::new(adc));
 
+        // WiFi
         let (wifi_controller, wifi_interfaces) =
-            esp_radio::wifi::new(radio_ctrl, peripherals.WIFI, Default::default()).map_err(|_| BoardError::WifiInitFail)?;
+            esp_radio::wifi::new(peripherals.WIFI, Default::default()).map_err(|_| BoardError::WifiInitFail)?;
 
         // MAX7219
         let sck = peripherals.GPIO0;
@@ -113,11 +116,12 @@ impl Board {
 
         let me = Self {
             rng,
-            _radio_controller: radio_ctrl,
             wifi_controller: Some(wifi_controller),
             wifi_interfaces: Some(wifi_interfaces),
             display,
             rtc,
+            adc,
+            adc_pin: Some(adc_pin),
         };
 
         Ok(me)
@@ -141,5 +145,13 @@ impl Board {
 
     pub fn rtc(&self) -> &'static SharedDevice<RtcDevice> {
         self.rtc
+    }
+
+    pub fn adc(&self) -> &'static SharedDevice<AdcDev> {
+        self.adc
+    }
+
+    pub const fn take_adc_pin(&mut self) -> Option<AdcPin1> {
+        self.adc_pin.take()
     }
 }

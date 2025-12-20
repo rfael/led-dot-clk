@@ -5,7 +5,7 @@ use esp_alloc as _;
 use esp_backtrace as _;
 use esp_hal::rng::Rng;
 use esp_radio::wifi::{
-    ClientConfig, Config as WifiConfig, Interfaces, ScanConfig, WifiController, WifiDevice, WifiEvent, WifiStaState,
+    Interfaces, ModeConfig, WifiController, WifiDevice, WifiEvent, WifiStationState, scan::ScanConfig, sta::StationConfig,
 };
 use thiserror::Error;
 
@@ -36,7 +36,7 @@ impl WifiInterface {
         controller: WifiController<'static>,
         config: &'static Config,
     ) -> WifiResult<Self> {
-        let wifi_interface = interfaces.sta;
+        let wifi_interface = interfaces.station;
 
         let net_config = embassy_net::Config::dhcpv4(Default::default());
 
@@ -93,18 +93,19 @@ async fn connection(mut controller: WifiController<'static>, config: &'static Wi
     log::debug!("start connection task");
     log::debug!("Device capabilities: {:?}", controller.capabilities());
     loop {
-        if esp_radio::wifi::sta_state() == WifiStaState::Connected {
+        if esp_radio::wifi::station_state() == WifiStationState::Connected {
             // wait until we're no longer connected
-            controller.wait_for_event(WifiEvent::StaDisconnected).await;
+            controller.wait_for_event(WifiEvent::StationDisconnected).await;
             Timer::after(config.reconnect_timeout()).await
         }
 
         if !matches!(controller.is_started(), Ok(true)) {
-            let client_conifg = ClientConfig::default()
+            let station_config = StationConfig::default()
                 .with_ssid(config.ssid().into())
                 .with_password(config.password().into());
-            let client_config = WifiConfig::Client(client_conifg);
-            if let Err(err) = controller.set_config(&client_config) {
+            let station_config = ModeConfig::Station(station_config);
+
+            if let Err(err) = controller.set_config(&station_config) {
                 log::error!("Settin WiFi conifg failed: {err}");
                 continue;
             }
@@ -121,6 +122,9 @@ async fn connection(mut controller: WifiController<'static>, config: &'static Wi
             log::debug!("Scan");
             let scan_config = ScanConfig::default().with_max(10);
             match controller.scan_with_config_async(scan_config).await {
+                Ok(r) if r.is_empty() => {
+                    log::debug!("Not found any networks, scanning again");
+                }
                 Ok(r) => r.iter().for_each(|ap| log::debug!("Found AP: {ap:?}")),
                 Err(err) => {
                     log::error!("WiFi AP scan failed: {err}");

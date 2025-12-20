@@ -1,4 +1,9 @@
-use crate::{bsp::BoardError, ntp::NtpClientError, system::display::DisplayError, wifi::WifiError};
+use crate::{
+    bsp::BoardError,
+    ntp::NtpClientError,
+    system::{display::DisplayError, motion_sensor::MotionSensorError},
+    wifi::WifiError,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -10,6 +15,8 @@ pub enum Error {
     NtpClient(#[from] NtpClientError),
     #[error("Display error: {0}")]
     Display(#[from] DisplayError),
+    #[error("Motion Sensor error: {0}")]
+    MotionSensor(#[from] MotionSensorError),
     #[error("Other error: {0}")]
     Other(&'static str),
 }
