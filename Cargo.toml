@@ -22,7 +22,11 @@ esp-println = { path = "./esp-hal/esp-println", features = [
     "esp32c2",
     "log-04",
 ] }
-esp-radio = { path = "./esp-hal/esp-radio", features = ["esp32c2", "wifi"] }
+esp-radio = { path = "./esp-hal/esp-radio", features = [
+    "esp32c2",
+    "wifi",
+    "unstable",
+] }
 esp-bootloader-esp-idf = { path = "./esp-hal/esp-bootloader-esp-idf", features = [
     "esp32c2",
 ] }

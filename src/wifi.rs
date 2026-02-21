@@ -4,9 +4,7 @@ use embassy_time::{Duration, Ticker, Timer};
 use esp_alloc as _;
 use esp_backtrace as _;
 use esp_hal::rng::Rng;
-use esp_radio::wifi::{
-    Interfaces, ModeConfig, WifiController, WifiDevice, WifiEvent, WifiStationState, scan::ScanConfig, sta::StationConfig,
-};
+use esp_radio::wifi::{self, Interface, Interfaces, WifiController, sta::StationConfig};
 use thiserror::Error;
 
 use crate::{
@@ -24,7 +22,6 @@ pub type WifiResult<T> = Result<T, WifiError>;
 
 pub struct WifiInterface {
     config: &'static Config,
-    // controller: WifiController<'static>,
     stack: Stack<'static>,
 }
 
@@ -57,7 +54,7 @@ impl WifiInterface {
     async fn launch(
         &self,
         spawner: &Spawner,
-        runner: Runner<'static, WifiDevice<'static>>,
+        runner: Runner<'static, Interface<'static>>,
         controller: WifiController<'static>,
     ) -> WifiResult<()> {
         spawner.spawn(connection(controller, self.config.wifi()))?;
@@ -88,61 +85,54 @@ impl WifiInterface {
 
 #[embassy_executor::task]
 async fn connection(mut controller: WifiController<'static>, config: &'static WiFiConfig) {
-    log::debug!("start connection task");
-    log::debug!("Device capabilities: {:?}", controller.capabilities());
+    const MAX_CONN_FAIL: usize = 5;
+    log::debug!("Start connection task");
+
     loop {
-        if esp_radio::wifi::station_state() == WifiStationState::Connected {
-            // wait until we're no longer connected
-            controller.wait_for_event(WifiEvent::StationDisconnected).await;
+        let station_config = StationConfig::default()
+            .with_ssid(config.ssid())
+            .with_password(config.password().into());
+        let station_config = wifi::Config::Station(station_config);
+
+        if let Err(err) = controller.set_config(&station_config) {
+            log::error!("Settin WiFi conifg failed: {err}");
+            Timer::after(config.reconnect_timeout()).await;
+            continue;
+        }
+
+        log::info!("Wifi configured and started!");
+
+        let mut conn_fails = 0;
+        loop {
+            log::info!("About to connect...");
+            match controller.connect_async().await {
+                Ok(info) => {
+                    log::info!("Connected to {info:?}");
+                    match controller.wait_for_disconnect_async().await {
+                        Ok(info) => log::info!("Disconnected: {info:?}"),
+                        Err(err) => {
+                            log::error!("Waiting for disconnect failed: {err:?}");
+                            conn_fails += 1;
+                        }
+                    }
+                }
+                Err(err) => {
+                    log::error!("Failed to connect to wifi: {err:?}");
+                    conn_fails += 1;
+                }
+            }
+
+            if conn_fails >= MAX_CONN_FAIL {
+                log::error!("Connection failed {conn_fails}/{MAX_CONN_FAIL}: reconfigure WiFi");
+                break;
+            }
+
             Timer::after(config.reconnect_timeout()).await
-        }
-
-        if !matches!(controller.is_started(), Ok(true)) {
-            let station_config = StationConfig::default()
-                .with_ssid(config.ssid().into())
-                .with_password(config.password().into());
-            let station_config = ModeConfig::Station(station_config);
-
-            if let Err(err) = controller.set_config(&station_config) {
-                log::error!("Settin WiFi conifg failed: {err}");
-                continue;
-            }
-
-            log::info!("Starting wifi");
-            match controller.start_async().await {
-                Ok(_) => log::info!("Wifi started!"),
-                Err(err) => {
-                    log::error!("Starting WiFi controller failed: {err}");
-                    continue;
-                }
-            }
-
-            log::debug!("Scan");
-            let scan_config = ScanConfig::default().with_max(10);
-            match controller.scan_with_config_async(scan_config).await {
-                Ok(r) if r.is_empty() => {
-                    log::debug!("Not found any networks, scanning again");
-                }
-                Ok(r) => r.iter().for_each(|ap| log::debug!("Found AP: {ap:?}")),
-                Err(err) => {
-                    log::error!("WiFi AP scan failed: {err}");
-                    continue;
-                }
-            }
-        }
-        log::info!("About to connect...");
-
-        match controller.connect_async().await {
-            Ok(_) => log::info!("Wifi connected!"),
-            Err(e) => {
-                log::error!("Failed to connect to wifi: {e:?}");
-                Timer::after(config.reconnect_timeout()).await
-            }
         }
     }
 }
 
 #[embassy_executor::task]
-async fn net_task(mut runner: Runner<'static, WifiDevice<'static>>) {
+async fn net_task(mut runner: Runner<'static, Interface<'static>>) {
     runner.run().await
 }

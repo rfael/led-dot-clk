@@ -79,7 +79,7 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
     ntp_client.launch(&spawner)?;
 
     let day_start = NaiveTime::from_hms_opt(6, 30, 0).ok_or(error::Error::other("Invalid night start time"))?;
-    let day_end = NaiveTime::from_hms_opt(17, 0, 0).ok_or(error::Error::other("Invalid night end time"))?;
+    let day_end = NaiveTime::from_hms_opt(22, 0, 0).ok_or(error::Error::other("Invalid night end time"))?;
     let day_time = day_start..day_end;
 
     let mut timeout = Duration::from_secs(1);
