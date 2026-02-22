@@ -11,3 +11,7 @@ target/
 
 # Notes
 notes.md
+
+# FreeCAD
+*.FCBak
+*.step
