@@ -36,13 +36,11 @@ esp-rtos = { path = "./esp-hal/esp-rtos", features = [
     "esp-radio",
 ] }
 embassy-executor = { version = "0.9.1" }
-embassy-net = { version = "0.7.1", features = [
-    "tcp",
+embassy-net = { version = "0.8.0", features = [
     "udp",
     "dns",
     "dhcpv4",
-    "medium-ethernet",
-    "proto-ipv6",
+    "proto-ipv4",
 ] }
 embassy-sync = "0.7.2"
 embassy-time = "0.5.0"
@@ -51,9 +49,9 @@ embassy-futures = "0.1.2"
 embedded-hal-async = "1.0"
 heapless = { version = "0.9.1", default-features = false }
 static_cell = { version = "2.1.0", features = ["nightly"] }
-sntpc = { version = "0.6.1", default-features = false, features = [
-    "embassy-socket",
-    "embassy-socket-ipv6",
+sntpc = { version = "0.8.1", default-features = false, features = [] }
+sntpc-net-embassy = { version = "0.8.0", default-features = false, features = [
+    "log",
 ] }
 chrono = { version = "0.4.41", default-features = false }
 thiserror = { version = "2.0.12", default-features = false }

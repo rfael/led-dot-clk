@@ -9,6 +9,7 @@ use embassy_net::{
 };
 use embassy_time::{Duration, Ticker};
 use sntpc::{NtpContext, NtpTimestampGenerator};
+use sntpc_net_embassy::UdpSocketWrapper;
 use thiserror::Error;
 
 use crate::{
@@ -76,6 +77,7 @@ async fn ntp_task(client: NtpClient) {
             ticker.next().await;
             continue;
         }
+        let socket = UdpSocketWrapper::new(socket);
 
         let context = NtpContext::new(Timestamp::default());
 
