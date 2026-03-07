@@ -9,10 +9,12 @@ use thiserror::Error;
 
 use crate::{
     config::{Config, WiFiConfig},
+    log_wrapper::{debug, error, info},
     mk_static,
 };
 
 #[derive(Debug, Error)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum WifiError {
     #[error("Spawnn error: {0}")]
     SpawnError(#[from] SpawnError),
@@ -62,14 +64,14 @@ impl WifiInterface {
 
         let mut ticker = Ticker::every(Duration::from_millis(500));
         while !self.stack.is_link_up() {
-            log::info!("Wait for WiFi interface link up");
+            info!("Wait for WiFi interface link up");
             ticker.next().await;
         }
 
-        log::info!("Waiting to get IP address...");
+        info!("Waiting to get IP address...");
         loop {
             if let Some(config) = self.stack.config_v4() {
-                log::info!("Got IP: {}", config.address);
+                info!("Got IP: {}", config.address);
                 break;
             }
             ticker.next().await;
@@ -86,7 +88,7 @@ impl WifiInterface {
 #[embassy_executor::task]
 async fn connection(mut controller: WifiController<'static>, config: &'static WiFiConfig) {
     const MAX_CONN_FAIL: usize = 5;
-    log::debug!("Start connection task");
+    debug!("Start connection task");
 
     loop {
         let station_config = StationConfig::default()
@@ -95,35 +97,35 @@ async fn connection(mut controller: WifiController<'static>, config: &'static Wi
         let station_config = wifi::Config::Station(station_config);
 
         if let Err(err) = controller.set_config(&station_config) {
-            log::error!("Settin WiFi conifg failed: {err}");
+            error!("Settin WiFi conifg failed: {}", err);
             Timer::after(config.reconnect_timeout()).await;
             continue;
         }
 
-        log::info!("Wifi configured and started!");
+        info!("Wifi configured and started!");
 
         let mut conn_fails = 0;
         loop {
-            log::info!("About to connect...");
+            info!("About to connect...");
             match controller.connect_async().await {
-                Ok(info) => {
-                    log::info!("Connected to {info:?}");
+                Ok(i) => {
+                    info!("Connected to {:?}", i);
                     match controller.wait_for_disconnect_async().await {
-                        Ok(info) => log::info!("Disconnected: {info:?}"),
+                        Ok(i) => info!("Disconnected: {:?}", i),
                         Err(err) => {
-                            log::error!("Waiting for disconnect failed: {err:?}");
+                            error!("Waiting for disconnect failed: {:?}", err);
                             conn_fails += 1;
                         }
                     }
                 }
                 Err(err) => {
-                    log::error!("Failed to connect to wifi: {err:?}");
+                    error!("Failed to connect to wifi: {:?}", err);
                     conn_fails += 1;
                 }
             }
 
             if conn_fails >= MAX_CONN_FAIL {
-                log::error!("Connection failed {conn_fails}/{MAX_CONN_FAIL}: reconfigure WiFi");
+                error!("Connection failed {}/{}: reconfigure WiFi", conn_fails, MAX_CONN_FAIL);
                 break;
             }
 

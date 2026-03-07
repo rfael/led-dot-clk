@@ -6,6 +6,7 @@ use crate::{
 };
 
 #[derive(Debug, thiserror::Error)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Error {
     #[error("Board error: {0}")]
     Board(#[from] BoardError),

@@ -14,6 +14,7 @@ use crate::{
 };
 
 #[derive(Debug, Error)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum MotionSensorError {
     #[error("Spawnn error: {0}")]
     SpawnError(#[from] SpawnError),
@@ -51,7 +52,7 @@ impl MotionSensor {
             self.sensor_enable_pin.set_high();
             let sample = self.adc.lock().await.read_oneshot(&mut self.adc_pin).await;
             self.sensor_enable_pin.set_low();
-            // log::debug!("ADC1 = {sample}");
+            // debug!("ADC1 = {}", sample);
 
             samples.push_back(sample);
             if samples.len() < 32 {

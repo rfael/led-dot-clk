@@ -1,7 +1,10 @@
 use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeDelta, Utc};
 use embassy_time::Instant;
 
-use crate::bsp::{RtcDevice, SharedDevice};
+use crate::{
+    bsp::{RtcDevice, SharedDevice},
+    log_wrapper::{debug, error},
+};
 
 pub struct WallClock {
     rtc: &'static SharedDevice<RtcDevice>,
@@ -14,11 +17,14 @@ impl WallClock {
     pub async fn init(rtc: &'static SharedDevice<RtcDevice>, timezone: FixedOffset) -> Self {
         let now = match rtc.lock().await.datetime().await {
             Ok(t) => {
-                log::debug!("Time read from RTC: {t} UTC");
+                debug!("Time read from RTC: {} UTC", t);
                 t
             }
-            Err(err) => {
-                log::error!("Reading time from RTC failed: {err:?}");
+            Err(_err) => {
+                #[cfg(feature = "log")]
+                error!("Reading time from RTC failed: {:?}", _err);
+                #[cfg(feature = "defmt")]
+                error!("Reading time from RTC failed");
                 NaiveDateTime::MIN
             }
         }
@@ -35,11 +41,14 @@ impl WallClock {
     pub async fn now_utc(&mut self) -> DateTime<Utc> {
         self.last_known_time = match self.rtc.lock().await.datetime().await {
             Ok(t) => {
-                log::debug!("Time read from RTC: {t} UTC");
+                debug!("Time read from RTC: {} UTC", t);
                 t.and_utc()
             }
-            Err(err) => {
-                log::error!("Reading time from RTC failed: {err:?}");
+            Err(_err) => {
+                #[cfg(feature = "log")]
+                error!("Reading time from RTC failed: {:?}", _err);
+                #[cfg(feature = "defmt")]
+                error!("Reading time from RTC failed");
                 self.last_known_time + TimeDelta::microseconds(self.last_time_check.as_micros() as _)
             }
         };

@@ -26,6 +26,7 @@ mod max7219_led_matrix;
 pub use max7219_led_matrix::{Max7219, Max7219Error};
 
 #[derive(Debug, Error)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum BoardError {
     #[error("WiFi initialization failed")]
     WifiInitFail,
@@ -34,7 +35,7 @@ pub enum BoardError {
     #[error("I2C initialization error: {0}")]
     I2CConfigError(#[from] I2cConfigError),
     #[error("RTC error: {0:?}")]
-    RtcError(DS3231Error<I2cError>),
+    RtcError(#[cfg_attr(feature = "defmt", defmt(Debug2Format))] DS3231Error<I2cError>),
 }
 impl_from_variant!(BoardError, RtcError, DS3231Error<I2cError>);
 

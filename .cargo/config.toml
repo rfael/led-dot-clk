@@ -2,18 +2,17 @@
 runner = "espflash flash --monitor"
 
 [env]
-ESP_LOG="debug"
+ESP_LOG = "debug"
+DEFMT_LOG = "debug,sntpc_net_embassy=info"
 
 [build]
 rustflags = [
-  # "-C", "link-arg=-Tlinkall.x",
-  # "-C", "link-arg=--nmagic",
+    # "-C", "link-arg=-Tlinkall.x",
+    # "-C", "link-arg=--nmagic",
 
-  # Required to obtain backtrace (e.g. When using the "esp-backtrace" crate.)
-  # NOTE: May negatively impact performance of produced code
-  "-C", "force-frame-pointers",
-
-  # "-C", "link-arg=-Tdefmt.x",
+    # NOTE: May negatively impact performance of produced code
+    # Required to obtain backtrace (e.g. When using the "esp-backtrace" crate.)
+    "-C", "force-frame-pointers",
 ]
 
 target = "riscv32imc-unknown-none-elf"

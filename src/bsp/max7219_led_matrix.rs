@@ -47,6 +47,16 @@ impl<S> From<S> for Max7219Error<S> {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl<S> defmt::Format for Max7219Error<S> {
+    fn format(&self, fmt: defmt::Formatter) {
+        match self {
+            Max7219Error::Spi(_) => defmt::write!(fmt, "SPI Error"),
+            Max7219Error::InvalidInput => defmt::write!(fmt, "Invalid Input"),
+        }
+    }
+}
+
 pub type Max7219Result<T, S> = Result<T, Max7219Error<S>>;
 
 /// A MAX7219 chip.

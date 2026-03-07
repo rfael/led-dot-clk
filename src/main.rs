@@ -8,10 +8,13 @@ use embassy_time::{Duration, Timer};
 use esp_alloc as _;
 use esp_backtrace as _;
 use esp_hal::{clock::CpuClock, rom::software_reset, system::reset_reason};
+#[cfg(feature = "defmt")]
+use esp_println as _;
 
 use crate::{
     bsp::Board,
     config::Config,
+    log_wrapper::{debug, error, info},
     ntp::NtpClient,
     system::{display::Display, motion_sensor::MotionSensor, time::WallClock},
     wifi::WifiInterface,
@@ -22,6 +25,7 @@ esp_bootloader_esp_idf::esp_app_desc!();
 mod bsp;
 mod config;
 mod error;
+mod log_wrapper;
 mod ntp;
 mod system;
 mod utils;
@@ -30,7 +34,7 @@ mod wifi;
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
     if let Err(err) = fallible_main(spawner).await {
-        log::error!("Main failed: {err}")
+        error!("Main failed: {}", err)
     }
 
     Timer::after(Duration::from_secs(1)).await;
@@ -38,9 +42,11 @@ async fn main(spawner: Spawner) -> ! {
 }
 
 async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
+    #[cfg(feature = "log")]
     esp_println::logger::init_logger_from_env();
+
     if let Some(reason) = reset_reason() {
-        log::info!("Last reset reason: {reason:?}")
+        info!("Last reset reason: {:?}", reason as u32)
     }
 
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
@@ -66,7 +72,7 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
     motion_sensor.launch(&spawner)?;
 
     let datetime = wall_clock.now_local().await;
-    log::info!("Initial date time: {datetime}");
+    info!("Initial date time: {}", datetime);
     display.write_time(datetime.time()).await?;
 
     let wifi_interfaces = board.take_wifi_interfaces().ok_or(error::Error::other("No WiFi interface"))?;
@@ -87,7 +93,7 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
         let presence_detected = match select(Timer::after(timeout), sensor_rx.changed()).await {
             Either::First(_) => false,
             Either::Second(_) => {
-                log::info!("Presence detected, displaying time");
+                info!("Presence detected, displaying time");
                 true
             }
         };
@@ -96,12 +102,12 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
 
         if !(presence_detected || day_time.contains(&datetime.time())) {
             if let Err(err) = display.clear().await {
-                log::error!("Failed to clear display: {err}");
+                error!("Failed to clear display: {}", err);
             }
             continue;
         }
 
-        log::debug!("Time to display: {datetime}");
+        debug!("Time to display: {}", datetime);
 
         match display.write_time(datetime.time()).await {
             Ok(()) if presence_detected => {
@@ -111,7 +117,7 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
                 timeout = Duration::from_secs(60 - datetime.second() as u64);
             }
             Err(err) => {
-                log::error!("Failed to display time: {err}");
+                error!("Failed to display time: {}", err);
                 timeout = Duration::from_secs(10);
             }
         }

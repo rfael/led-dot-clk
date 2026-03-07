@@ -8,11 +8,13 @@ use thiserror::Error;
 use crate::{
     bsp::{Max7219, Max7219Error, SharedDevice, SpiDev},
     impl_from_variant,
+    log_wrapper::debug,
 };
 
 pub type SpiError = SpiDeviceError<esp_hal::spi::Error, Infallible>;
 
 #[derive(Debug, Error)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum DisplayError {
     #[error("Max7219 error")]
     Max7219(Max7219Error<SpiError>),
@@ -47,7 +49,7 @@ impl Display {
 
     #[allow(unused)]
     pub async fn clear(&self) -> DisplayResult<()> {
-        log::debug!("Clearing display");
+        debug!("Clearing display");
         self.max7219.lock().await.clear().await?;
         Ok(())
     }

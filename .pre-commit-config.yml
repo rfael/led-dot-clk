@@ -13,12 +13,19 @@ repos:
       - id: check-added-large-files
       - id: detect-private-key
       - id: mixed-line-ending
-
   - repo: https://github.com/backplane/pre-commit-rust-hooks
     rev: v1.1.0
     hooks:
       - id: fmt
       - id: check
+        name: clippy log
+        args: ["-F", "log"]
+      - id: check
+        name: check defmt
+        args: ["-F", "defmt"]
       - id: clippy
-        args: ["--", "-D", "warnings", "--no-deps"]
-      # - id: test
+        name: clippy log
+        args: ["-F", "log", "--", "-D", "warnings", "--no-deps"]
+      - id: clippy
+        name: clippy defmt
+        args: ["-F", "defmt", "--", "-D", "warnings", "--no-deps"]

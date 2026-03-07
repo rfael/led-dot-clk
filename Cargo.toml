@@ -6,21 +6,18 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-log = { version = "0.4.22" }
+log = { version = "0.4.22", optional = true }
+defmt = { version = "1.0.1", optional = true }
 esp-alloc = { path = "./esp-hal/esp-alloc" }
 esp-backtrace = { path = "./esp-hal/esp-backtrace", features = [
     "esp32c2",
     "panic-handler",
-    "println",
 ] }
-esp-hal = { path = "./esp-hal/esp-hal", features = [
+esp-hal = { path = "./esp-hal/esp-hal", features = ["esp32c2", "unstable"] }
+esp-println = { path = "./esp-hal/esp-println", default-features = false, features = [
     "esp32c2",
-    "log-04",
-    "unstable",
-] }
-esp-println = { path = "./esp-hal/esp-println", features = [
-    "esp32c2",
-    "log-04",
+    "critical-section",
+    "uart",
 ] }
 esp-radio = { path = "./esp-hal/esp-radio", features = [
     "esp32c2",
@@ -50,14 +47,35 @@ embedded-hal-async = "1.0"
 heapless = { version = "0.9.1", default-features = false }
 static_cell = { version = "2.1.0", features = ["nightly"] }
 sntpc = { version = "0.8.1", default-features = false, features = [] }
-sntpc-net-embassy = { version = "0.8.0", default-features = false, features = [
-    "log",
-] }
-chrono = { version = "0.4.41", default-features = false }
+sntpc-net-embassy = { version = "0.8.0", default-features = false }
+chrono = { version = "0.4.44", default-features = false }
 thiserror = { version = "2.0.12", default-features = false }
 ds3231 = { version = "0.3.0", features = ["async", "temperature_f32"] }
 circular-buffer = { version = "1.2.0", default-features = false }
 
+[features]
+default = []
+log = [
+    "dep:log",
+    "esp-backtrace/println",
+    "esp-hal/log-04",
+    "esp-println/colors",
+    "esp-println/log-04",
+    "sntpc-net-embassy/log",
+]
+defmt = [
+    "chrono/defmt",
+    "dep:defmt",
+    "ds3231/defmt",
+    "embassy-executor/defmt",
+    "esp-backtrace/defmt",
+    "esp-hal/defmt",
+    "esp-println/defmt-espflash",
+    "esp-radio/defmt",
+    "sntpc-net-embassy/defmt",
+    "sntpc/defmt",
+    "embedded-hal-async/defmt-03",
+]
 
 [profile.dev]
 # Rust debug is too slow.
