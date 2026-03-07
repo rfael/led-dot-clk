@@ -5,9 +5,9 @@ Shelf clock with LED dot matrix display and NTP time synchronization on ESP32-C2
 ## Build
 
 ```bash
-git submodule update --init --recursive
+# Add target riscv32imc-unknown-none-elf
+rustup target add riscv32imc-unknown-none-elf
 
-# Apply patch to esp-hal
-cd esp-hal
-git apply ../esp-hal.patch
+# Build
+cargo build --release
 ```
