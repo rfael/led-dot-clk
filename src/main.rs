@@ -15,9 +15,9 @@ use crate::{
     bsp::Board,
     config::Config,
     log_wrapper::{debug, error, info},
-    ntp::NtpClient,
-    system::{display::Display, motion_sensor::MotionSensor, time::WallClock},
-    wifi::WifiInterface,
+    system::{
+        display::Display, motion_sensor::MotionSensor, mqtt::MqttClient, ntp::NtpClient, time::WallClock, wifi::WifiInterface,
+    },
 };
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -26,10 +26,8 @@ mod bsp;
 mod config;
 mod error;
 mod log_wrapper;
-mod ntp;
 mod system;
 mod utils;
-mod wifi;
 
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
@@ -83,6 +81,9 @@ async fn fallible_main(spawner: Spawner) -> Result<(), error::Error> {
 
     let ntp_client = NtpClient::new(wifi.stack(), config.ntp_client(), board.rtc());
     ntp_client.launch(&spawner)?;
+
+    let mqtt_client = MqttClient::new(wifi.stack());
+    mqtt_client.launch(&spawner)?;
 
     let day_start = NaiveTime::from_hms_opt(6, 30, 0).ok_or(error::Error::other("Invalid night start time"))?;
     let day_end = NaiveTime::from_hms_opt(22, 0, 0).ok_or(error::Error::other("Invalid night end time"))?;

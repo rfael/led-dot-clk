@@ -1,8 +1,8 @@
 use crate::{
     bsp::BoardError,
-    ntp::NtpClientError,
-    system::{display::DisplayError, motion_sensor::MotionSensorError},
-    wifi::WifiError,
+    system::{
+        display::DisplayError, motion_sensor::MotionSensorError, mqtt::MqttClientError, ntp::NtpClientError, wifi::WifiError,
+    },
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -18,6 +18,8 @@ pub enum Error {
     Display(#[from] DisplayError),
     #[error("Motion Sensor error: {0}")]
     MotionSensor(#[from] MotionSensorError),
+    #[error("MQTT error: {0}")]
+    MqttClient(#[from] MqttClientError),
     #[error("Other error: {0}")]
     Other(&'static str),
 }

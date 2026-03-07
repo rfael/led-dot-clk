@@ -37,6 +37,7 @@ esp-rtos = { git = "https://github.com/esp-rs/esp-hal.git", rev = "ad5b1270d51f4
 ] }
 embassy-executor = { version = "0.9.1" }
 embassy-net = { version = "0.8.0", features = [
+    "tcp",
     "udp",
     "dns",
     "dhcpv4",
@@ -55,6 +56,7 @@ chrono = { version = "0.4.44", default-features = false }
 thiserror = { version = "2.0.12", default-features = false }
 ds3231 = { version = "0.3.0", features = ["async", "temperature_f32"] }
 circular-buffer = { version = "1.2.0", default-features = false }
+rust-mqtt = { version = "0.4.1", default-features = false, features = ["v5", "bump"]  }
 
 [features]
 default = []
@@ -78,6 +80,7 @@ defmt = [
     "sntpc-net-embassy/defmt",
     "sntpc/defmt",
     "embedded-hal-async/defmt-03",
+    "rust-mqtt/defmt",
 ]
 
 [profile.dev]
